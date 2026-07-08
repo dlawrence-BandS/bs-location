@@ -162,6 +162,7 @@ th.sortable:hover{color:var(--onair)}
   <button data-tab="cities">Cities</button>
   <button data-tab="map">Map</button>
   <button data-tab="channels">Channel Mix</button>
+  <button data-tab="promos">Promotions</button>
   <button data-tab="flights">Campaign Impact</button>
 </nav>
 
@@ -203,6 +204,7 @@ th.sortable:hover{color:var(--onair)}
       <label><input type="checkbox" id="trSmooth"> 7-day avg (daily only)</label>
       <label><input type="checkbox" id="trCompare" checked> Comparison overlay (dashed)</label>
       <label><input type="checkbox" id="trFlights" checked> Show campaign flights</label>
+      <label><input type="checkbox" id="trPromos" checked> Show promotions</label>
     </div>
     <div class="chips" id="trChips" style="margin-bottom:12px"></div>
     <div class="chartbox tall"><canvas id="trendChart"></canvas></div>
@@ -278,6 +280,37 @@ th.sortable:hover{color:var(--onair)}
     <div class="sub">TV rarely gets click-through credit; it shows up as extra Direct and brand-search traffic in the regions where it aired. Weekly sessions, indexed to the first week of the period (100). Flights shaded.</div>
     <div class="ctlrow"><div class="chips" id="haloChips"></div></div>
     <div class="chartbox tall"><canvas id="haloChart"></canvas></div>
+  </div>
+</div>
+
+<!-- ============ CAMPAIGN IMPACT ============ -->
+<!-- ============ PROMOTIONS ============ -->
+<div class="tab" id="tab-promos">
+  <div class="panel">
+    <h3>Promotion comparison — year over year</h3>
+    <div class="sub">Runs are aligned by campaign day (Day 1 = preview &amp; sale start), so different calendar dates compare cleanly. Dates from the 2025/2026 preview calendars — TBC dates flagged. UK traffic only.</div>
+    <div class="ctlrow">
+      <label>Campaign</label><select id="prCampaign" onchange="onPromoCampaign()"></select>
+      <label>Compare</label><select id="prRunA"></select>
+      <label>vs</label><select id="prRunB"></select>
+      <label>Metric</label><select id="prMetric"></select>
+      <label><input type="checkbox" id="prSmooth" checked> 7-day avg</label>
+      <label><input type="checkbox" id="prCum"> Cumulative</label>
+      <button class="action red" onclick="runPromoCompare()">Compare</button>
+    </div>
+    <div id="prStats" class="statrow"></div>
+    <div class="chartbox tall"><canvas id="promoChart"></canvas></div>
+    <div class="note" id="prNote"></div>
+  </div>
+  <div class="panel">
+    <h3>TV region change between runs</h3>
+    <div class="sub" id="prRegionSub">Run a comparison above to populate.</div>
+    <div style="overflow-x:auto"><table id="promoRegionTable"></table></div>
+    <button class="ghost" style="margin-top:10px" onclick="exportPromoRegions()">Export CSV</button>
+  </div>
+  <div class="panel">
+    <h3>Campaign calendar</h3>
+    <div style="overflow-x:auto"><table id="promoCalTable"></table></div>
   </div>
 </div>
 
@@ -373,9 +406,35 @@ const STORES = [
 
 // Auto event markers (from previous analyses)
 const AUTO_EVENTS = [
-  {date:'2026-03-01', label:'Spring Promotion'},
   {date:'2026-06-30', label:'Dining chair delivery change (flat £15)'},
 ];
+
+/* Campaign calendar from 2025 + 2026 preview dates docs. Winter 25/26 end taken from the 2026 doc (1 Mar) — the 2025 doc said 22 Feb. */
+const PROMOS = [
+  {key:'spring', label:'Spring Promotion', runs:[
+    {tag:'2025', start:'2025-03-22', end:'2025-05-26'},
+    {tag:'2026', start:'2026-03-28', end:'2026-05-25'}]},
+  {key:'summer', label:'Summer Sale', runs:[
+    {tag:'2025', start:'2025-06-21', end:'2025-08-25'},
+    {tag:'2026', start:'2026-06-20', end:'2026-08-31'}]},
+  {key:'autumn', label:'Autumn Promotion', runs:[
+    {tag:'2025', start:'2025-09-20', end:'2025-11-23'},
+    {tag:'2026', start:'2026-09-26', end:'2026-11-22', tbc:true}]},
+  {key:'winter', label:'Winter Sale', runs:[
+    {tag:'2024/25', start:'2024-12-26', end:'2025-02-23'},
+    {tag:'2025/26', start:'2025-12-26', end:'2026-03-01'},
+    {tag:'2026/27', start:'2026-12-26', end:'2027-02-28', tbc:true}]},
+  {key:'bf', label:'Black Friday weekend', runs:[
+    {tag:'2025', start:'2025-11-28', end:'2025-12-01'},
+    {tag:'2026', start:'2026-11-27', end:'2026-11-30', tbc:true}]},
+  {key:'clearjan', label:'Extra 10% Clearance Wknd (Jan)', runs:[
+    {tag:'2025', start:'2025-01-11', end:'2025-01-12'},
+    {tag:'2026', start:'2026-01-10', end:'2026-01-11'}]},
+  {key:'clearjul', label:'Extra 10% Clearance Wknd (Jul)', runs:[
+    {tag:'2025', start:'2025-07-12', end:'2025-07-13'},
+    {tag:'2026', start:'2026-07-11', end:'2026-07-12', tbc:true}]},
+];
+const promoBands=()=>PROMOS.flatMap(p=>p.runs.map(r=>({from:r.start,to:r.end,label:p.label+' '+r.tag,tag:'PROMO'})));
 
 const METRICS = {
   sessions:{label:'Sessions',fmt:'num',base:'s'},
@@ -514,6 +573,15 @@ const flightBands={id:'flightBands',beforeDatasetsDraw(chart){
     if(i1===-1||i2===-1||i2<i1)return;
     const px1=Math.max(x.getPixelForValue(i1)-4,chartArea.left), px2=Math.min(x.getPixelForValue(i2)+4,chartArea.right);
     ctx.save();
+    if(b.tag==='PROMO'){
+      ctx.fillStyle='rgba(224,142,43,.16)';
+      ctx.fillRect(px1,chartArea.bottom-11,px2-px1,11);
+      ctx.fillStyle='rgba(224,142,43,.85)';
+      ctx.fillRect(px1,chartArea.bottom-11,px2-px1,2);
+      if(px2-px1>70){ ctx.font='600 8px Space Grotesk'; ctx.fillStyle='#8F6318'; ctx.textAlign='left';
+        ctx.fillText(b.label.toUpperCase(),px1+4,chartArea.bottom-3); }
+      ctx.restore(); return;
+    }
     ctx.fillStyle=b.color||'rgba(200,64,79,.10)';
     ctx.fillRect(px1,chartArea.top,px2-px1,chartArea.bottom-chartArea.top);
     ctx.fillStyle=b.solid||'rgba(200,64,79,.85)';
@@ -526,9 +594,12 @@ const flightBands={id:'flightBands',beforeDatasetsDraw(chart){
 Chart.register(flightBands);
 Chart.defaults.font.family='Inter'; Chart.defaults.color='#5E6B78';
 function destroyChart(k){ if(state.charts[k]){state.charts[k].destroy();delete state.charts[k];} }
-function flightBandsFor(labels){
+function flightBandsFor(labels,opts){
   if(!labels||!labels.length)return[];
-  const bands=getFlights().map(f=>({from:f.start,to:f.end,label:f.name,tag:'ON AIR'}));
+  const o=Object.assign({flights:true,promos:true},opts||{});
+  const bands=[];
+  if(o.promos)promoBands().forEach(b=>{ if(b.to>=labels[0]&&b.from<=labels[labels.length-1])bands.push(b); });
+  if(o.flights)getFlights().forEach(f=>bands.push({from:f.start,to:f.end,label:f.name,tag:'ON AIR'}));
   AUTO_EVENTS.forEach(ev=>{ if(ev.date>=labels[0]&&ev.date<=labels[labels.length-1])
     bands.push({from:ev.date,to:ev.date,label:ev.label,tag:'EVENT',color:'rgba(24,34,46,.06)',solid:'rgba(24,34,46,.5)'}); });
   return bands;
@@ -536,7 +607,7 @@ function flightBandsFor(labels){
 
 /* ================= RENDER: SETUP ================= */
 function fillMetricSelect(id,def){ const s=$(id); s.innerHTML=Object.entries(METRICS).map(([k,m])=>`<option value="${k}" ${k===def?'selected':''}>${m.label}</option>`).join(''); }
-['trMetric','rgMetric','mapMetric','flMetric'].forEach((id,i)=>fillMetricSelect(id,['sessions','revenue','sessions','sessions'][i]));
+['trMetric','rgMetric','mapMetric','flMetric','prMetric'].forEach((id,i)=>fillMetricSelect(id,['sessions','revenue','sessions','sessions','revenue'][i]));
 (function(){ const opts=TV_REGIONS.map(r=>`<option>${r[0]}</option>`).join('');
   $('chRegion').innerHTML=`<option value="ALL">All UK regions</option>`+opts+`<option>UK - Other</option>`;
   $('fTest').innerHTML=opts; $('fCtrl').innerHTML=opts; })();
@@ -643,12 +714,12 @@ function renderTrends(){
   }
   state.charts.trend=new Chart($('trendChart'),{type:'line',data:{labels,datasets:ds},
     options:{maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
-      flightBands:$('trFlights').checked?flightBandsFor(labels):[],
+      flightBands:flightBandsFor(labels,{flights:$('trFlights').checked,promos:$('trPromos').checked}),
       plugins:{legend:{labels:{boxWidth:14,font:{size:10},filter:i=>!i.text.endsWith('(prev)')}},
         tooltip:{callbacks:{label:c=>` ${c.dataset.label}: ${mFmt(metric,c.parsed.y)}`}}},
       scales:{y:{ticks:{callback:v=>METRICS[metric].fmt==='pct'?(v*100).toFixed(0)+'%':METRICS[metric].fmt.startsWith('gbp')?'£'+v.toLocaleString():v.toLocaleString()}},x:{ticks:{maxTicksLimit:14}}}}});
 }
-['trMetric','trDim','trGran','trSmooth','trCompare','trFlights'].forEach(id=>$(id).onchange=()=>{ if(id==='trDim'){trSel=new Set(($('trDim').value==='nation'?NATIONS:TV_REGIONS.map(r=>r[0])).slice(0,4));buildTrendChips();} renderTrends(); });
+['trMetric','trDim','trGran','trSmooth','trCompare','trFlights','trPromos'].forEach(id=>$(id).onchange=()=>{ if(id==='trDim'){trSel=new Set(($('trDim').value==='nation'?NATIONS:TV_REGIONS.map(r=>r[0])).slice(0,4));buildTrendChips();} renderTrends(); });
 
 /* ================= TV REGIONS TAB ================= */
 function renderRegions(){
@@ -904,6 +975,124 @@ async function runFlightAnalysis(){
       scales:{x:{ticks:{maxTicksLimit:14,font:{size:9}}},y:{title:{display:true,text:METRICS[metric].label+' — indexed to own baseline (100)',font:{size:10}}}}}});
 }
 
+/* ================= PROMOTIONS (YoY campaign comparison) ================= */
+function fillPromoSelects(){
+  $('prCampaign').innerHTML=PROMOS.map((p,i)=>`<option value="${i}">${p.label}</option>`).join('');
+  onPromoCampaign();
+  renderPromoCalendar();
+}
+function promoRunOptions(p){
+  const today=new Date().toISOString().slice(0,10);
+  return p.runs.map((r,i)=>({i,r})).filter(x=>x.r.start<=today&&x.r.start>='2024-04-01');
+}
+function onPromoCampaign(){
+  const p=PROMOS[+$('prCampaign').value];
+  const opts=promoRunOptions(p);
+  const html=opts.map(x=>`<option value="${x.i}">${x.r.tag}${x.r.tbc?' (TBC)':''}</option>`).join('');
+  $('prRunA').innerHTML=html; $('prRunB').innerHTML=html;
+  if(opts.length>=2){ $('prRunA').value=opts[opts.length-2].i; $('prRunB').value=opts[opts.length-1].i; }
+}
+function dayCount(a,b){ return Math.round((new Date(b)-new Date(a))/864e5)+1; }
+async function runPromoCompare(){
+  const p=PROMOS[+$('prCampaign').value];
+  const A=p.runs[+$('prRunA').value], B=p.runs[+$('prRunB').value];
+  if(!A||!B||A===B){alert('Pick two different runs.');return;}
+  const yday=new Date(Date.now()-864e5).toISOString().slice(0,10);
+  const q=r=>runQuery(`SELECT FORMAT_DATE('%Y-%m-%d',date) d, tv_region tv, SUM(sessions) s, SUM(users) u, SUM(new_users) nu, SUM(engaged_sessions) es, SUM(transactions) t, ROUND(SUM(revenue),2) r FROM ${T('geo_daily')} WHERE date BETWEEN '${r.start}' AND '${r.end<yday?r.end:yday}' AND tv_region!='Non-UK' GROUP BY 1,2 ORDER BY 1`);
+  $('prStats').innerHTML='<div class="note">Querying BigQuery…</div>';
+  let ra,rb;
+  try{ [ra,rb]=await Promise.all([q(A),q(B)]); }
+  catch(e){ $('prStats').innerHTML=`<div class="note" style="color:#B03A48">Query failed: ${e.message}</div>`; return; }
+  state._promo={p,A,B,ra,rb}; renderPromo();
+}
+function promoDayAggs(rows){
+  const byDay={};
+  rows.forEach(x=>{ const a=byDay[x.d]||(byDay[x.d]={s:0,u:0,nu:0,es:0,t:0,r:0});
+    a.s+=+x.s;a.u+=+x.u;a.nu+=+x.nu;a.es+=+x.es;a.t+=+x.t;a.r+=+x.r; });
+  return Object.keys(byDay).sort().map(d=>byDay[d]);
+}
+function renderPromo(){
+  if(!state._promo)return;
+  const {p,A,B,ra,rb}=state._promo;
+  const metric=$('prMetric').value, m=METRICS[metric];
+  const aggA=promoDayAggs(ra), aggB=promoDayAggs(rb);
+  const lenA=aggA.length, lenB=aggB.length;
+  const N=Math.min(lenA,lenB);
+  const plannedB=dayCount(B.start,B.end);
+  const inflight=lenB<plannedB;
+  // KPIs over like-for-like first N days
+  const sumN=(agg)=>{ const t={s:0,u:0,nu:0,es:0,t:0,r:0}; agg.slice(0,N).forEach(a=>{for(const k in t)t[k]+=a[k];}); return t; };
+  const kA=sumN(aggA), kB=sumN(aggB);
+  const kpi=(label,va,vb,fmt)=>`<div class="stat"><div class="statlabel">${label}</div><div class="statval">${fmt(vb)}</div><div class="statsub">${p.label} ${A.tag}: ${fmt(va)} ${deltaBadge(vb,va)}</div></div>`;
+  $('prStats').innerHTML=
+    kpi('Sessions',kA.s,kB.s,fmtNum)+
+    kpi('Revenue',kA.r,kB.r,fmtGBP)+
+    kpi('Transactions',kA.t,kB.t,fmtNum)+
+    kpi('CVR',kA.s?kA.t/kA.s:0,kB.s?kB.t/kB.s:0,fmtPct)+
+    kpi('AOV',kA.t?kA.r/kA.t:0,kB.t?kB.r/kB.t:0,fmtGBP2);
+  $('prNote').textContent=`Like-for-like: first ${N} days of each run.`+
+    (inflight?` ${p.label} ${B.tag} is in flight — day ${lenB} of ${plannedB}.`:'')+
+    ` ${p.label} ${A.tag}: ${A.start} → ${A.end} (${lenA}d in data). ${p.label} ${B.tag}: ${B.start} → ${B.end}.`+
+    (A.tbc||B.tbc?' TBC dates are the current plan and may change.':'');
+  // day-aligned chart
+  const cum=$('prCum').checked, smooth=$('prSmooth').checked&&!cum;
+  const seriesOf=(agg)=>{
+    if(cum){ const run={s:0,u:0,nu:0,es:0,t:0,r:0};
+      return agg.map(a=>{for(const k in run)run[k]+=a[k]; return mVal(Object.assign({},run),metric);}); }
+    let v=agg.map(a=>mVal(a,metric));
+    if(smooth)v=v.map((_,i)=>{const w=v.slice(Math.max(0,i-6),i+1);return w.reduce((x,y)=>x+y,0)/w.length;});
+    return v;
+  };
+  const maxLen=Math.max(lenA,lenB);
+  const labels=Array.from({length:maxLen},(_,i)=>'Day '+(i+1));
+  destroyChart('promo');
+  state.charts.promo=new Chart($('promoChart'),{type:'line',
+    data:{labels,datasets:[
+      {label:p.label+' '+A.tag,data:seriesOf(aggA),borderColor:'#8A93A0',backgroundColor:'#8A93A0',borderWidth:2,borderDash:[6,4],pointRadius:0,tension:.3},
+      {label:p.label+' '+B.tag,data:seriesOf(aggB),borderColor:'#C8404F',backgroundColor:'#C8404F',borderWidth:2.5,pointRadius:0,tension:.3}]},
+    options:{maintainAspectRatio:false,
+      plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:10}}},
+        tooltip:{callbacks:{label:c=>` ${c.dataset.label}: ${m.fmt==='gbp'?fmtGBP(c.parsed.y):m.fmt==='pct'?fmtPct(c.parsed.y):fmtNum(Math.round(c.parsed.y))}`}}},
+      scales:{x:{ticks:{maxTicksLimit:16,font:{size:9}}},
+        y:{title:{display:true,text:m.label+(cum?' (cumulative)':smooth?' (7-day avg)':''),font:{size:10}},
+          ticks:{callback:v=>m.fmt==='gbp'?fmtGBP(v):m.fmt==='pct'?fmtPct(v):v.toLocaleString()}}}}});
+  // region table over like-for-like window
+  const cutA=new Date(A.start), cutB=new Date(B.start);
+  cutA.setDate(cutA.getDate()+N-1); cutB.setDate(cutB.getDate()+N-1);
+  const isoA=cutA.toISOString().slice(0,10), isoB=cutB.toISOString().slice(0,10);
+  const regAgg=(rows,end)=>{ const o={};
+    rows.filter(x=>x.d<=end).forEach(x=>{ const a=o[x.tv]||(o[x.tv]={s:0,t:0,r:0}); a.s+=+x.s;a.t+=+x.t;a.r+=+x.r; });
+    return o; };
+  const gA=regAgg(ra,isoA), gB=regAgg(rb,isoB);
+  const regs=[...new Set([...Object.keys(gA),...Object.keys(gB)])]
+    .map(tv=>({tv,a:gA[tv]||{s:0,t:0,r:0},b:gB[tv]||{s:0,t:0,r:0}}))
+    .sort((x,y)=>y.b.r-x.b.r);
+  $('prRegionSub').textContent=`First ${N} days of each run · ${p.label} ${A.tag} vs ${B.tag}`;
+  $('promoRegionTable').innerHTML=`<tr><th class="left">TV region</th><th>Sessions ${A.tag}</th><th>Sessions ${B.tag}</th><th>Δ</th><th>Revenue ${A.tag}</th><th>Revenue ${B.tag}</th><th>Δ</th><th>CVR ${A.tag}</th><th>CVR ${B.tag}</th></tr>`+
+    regs.map(x=>`<tr><td class="left"><span class="swatch" style="background:${TV_COLOR[x.tv]||'#B9B4AA'}"></span>${x.tv}</td>
+      <td class="num">${fmtNum(x.a.s)}</td><td class="num">${fmtNum(x.b.s)}</td><td>${deltaBadge(x.b.s,x.a.s)}</td>
+      <td class="num">${fmtGBP(x.a.r)}</td><td class="num">${fmtGBP(x.b.r)}</td><td>${deltaBadge(x.b.r,x.a.r)}</td>
+      <td class="num">${fmtPct(x.a.s?x.a.t/x.a.s:0)}</td><td class="num">${fmtPct(x.b.s?x.b.t/x.b.s:0)}</td></tr>`).join('');
+  state._promoRegs={regs,A,B};
+}
+function exportPromoRegions(){
+  if(!state._promoRegs){alert('Run a comparison first.');return;}
+  const {regs,A,B}=state._promoRegs;
+  exportCSV('promo_regions.csv',['tv_region','sessions_'+A.tag.replace('/','-'),'sessions_'+B.tag.replace('/','-'),'revenue_'+A.tag.replace('/','-'),'revenue_'+B.tag.replace('/','-')],
+    regs.map(x=>[x.tv,x.a.s,x.b.s,x.a.r.toFixed(2),x.b.r.toFixed(2)]));
+}
+function renderPromoCalendar(){
+  const yday=new Date().toISOString().slice(0,10);
+  $('promoCalTable').innerHTML=`<tr><th class="left">Campaign</th><th class="left">Run</th><th class="left">Start</th><th class="left">End</th><th class="left">Days</th><th class="left">Status</th></tr>`+
+    PROMOS.flatMap(p=>p.runs.map(r=>{
+      const status=r.end<yday?'Complete':r.start>yday?'Upcoming':'Live now';
+      return `<tr><td class="left">${p.label}</td><td class="left">${r.tag}</td><td class="left">${r.start}</td><td class="left">${r.end}${r.tbc?' <span style="color:#8F6318;font-weight:600">TBC</span>':''}</td><td class="left">${dayCount(r.start,r.end)}</td>
+        <td class="left" style="font-weight:600;color:${status==='Live now'?'#C8404F':status==='Upcoming'?'#5E6B78':'#1E7B4F'}">${status}</td></tr>`;
+    })).join('');
+}
+['prMetric','prSmooth','prCum'].forEach(id=>$(id).onchange=()=>{ if(state._promo)renderPromo(); });
+fillPromoSelects();
+
 /* ================= ASK AI ================= */
 function toggleAI(open){ $('aiDrawer').classList.toggle('open',open); }
 $('aiFab').onclick=()=>toggleAI(!$('aiDrawer').classList.contains('open'));
@@ -913,6 +1102,7 @@ function aiContext(){
   const league=(state._league||[]).map(r=>`${r.name}: sessions ${r.a.s}, revenue £${r.a.r.toFixed(0)}, CVR ${(r.a.s?r.a.t/r.a.s*100:0).toFixed(2)}%, rev/1kHH £${r.perK.toFixed(2)}, index ${r.idx.toFixed(0)}`).join('\n');
   const cities=state.cur.cities.slice(0,15).map(c=>`${c.city} (${c.tv}): ${c.s} sessions, £${(+c.r).toFixed(0)}`).join('\n');
   const flights=getFlights().map(f=>`${f.name} (${f.media}) ${f.start}→${f.end}, test: ${f.test.join('/')}, control: ${f.ctrl.join('/')}`).join('\n')||'none defined';
+  const promos=PROMOS.flatMap(p=>p.runs.map(r=>`${p.label} ${r.tag}: ${r.start}→${r.end}${r.tbc?' (TBC)':''}`)).join('; ');
   return `Barker & Stonehouse (premium UK furniture retailer) location performance, ${state.range.s} to ${state.range.e}${state.cmpRange?`, compared vs ${state.cmpRange.s} to ${state.cmpRange.e}`:''}.
 UK totals: ${uk.s} sessions, ${uk.u} users, ${uk.t} transactions, £${uk.r.toFixed(0)} revenue, CVR ${(uk.s?uk.t/uk.s*100:0).toFixed(2)}%.
 TV region league (index = revenue per 1k TV households vs UK average = 100):
@@ -920,7 +1110,8 @@ ${league}
 Top cities:
 ${cities}
 Campaign flights defined: ${flights}
-Known events: Spring Promotion Mar 2026; 30 Jun 2026 dining chair delivery moved to flat £15.`;
+Promotion calendar: ${promos}
+Known events: 30 Jun 2026 dining chair delivery moved to flat £15.`;
 }
 async function askAI(){
   const q=$('aiInput').value.trim(); if(!q)return;
