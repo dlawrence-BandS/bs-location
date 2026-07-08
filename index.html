@@ -1103,6 +1103,17 @@ function aiContext(){
   const cities=state.cur.cities.slice(0,15).map(c=>`${c.city} (${c.tv}): ${c.s} sessions, £${(+c.r).toFixed(0)}`).join('\n');
   const flights=getFlights().map(f=>`${f.name} (${f.media}) ${f.start}→${f.end}, test: ${f.test.join('/')}, control: ${f.ctrl.join('/')}`).join('\n')||'none defined';
   const promos=PROMOS.flatMap(p=>p.runs.map(r=>`${p.label} ${r.tag}: ${r.start}→${r.end}${r.tbc?' (TBC)':''}`)).join('; ');
+  let promoCmp='none run yet (user can run one on the Promotions tab)';
+  if(state._promo&&state._promoRegs){
+    const {p,A,B}=state._promo, {regs}=state._promoRegs;
+    const tot=k=>regs.reduce((acc,x)=>({s:acc.s+x[k].s,t:acc.t+x[k].t,r:acc.r+x[k].r}),{s:0,t:0,r:0});
+    const tA=tot('a'), tB=tot('b');
+    const regLines=regs.map(x=>`${x.tv}: sessions ${x.a.s}→${x.b.s} (${x.a.s?((x.b.s/x.a.s-1)*100).toFixed(1):'n/a'}%), revenue £${x.a.r.toFixed(0)}→£${x.b.r.toFixed(0)} (${x.a.r?((x.b.r/x.a.r-1)*100).toFixed(1):'n/a'}%)`).join('\n');
+    promoCmp=`${p.label} ${A.tag} vs ${B.tag}, like-for-like first N days of each run (UK only).
+UK totals: sessions ${tA.s}→${tB.s} (${((tB.s/tA.s-1)*100).toFixed(1)}%), transactions ${tA.t}→${tB.t}, revenue £${tA.r.toFixed(0)}→£${tB.r.toFixed(0)} (${((tB.r/tA.r-1)*100).toFixed(1)}%).
+By TV region (${A.tag}→${B.tag}):
+${regLines}`;
+  }
   return `Barker & Stonehouse (premium UK furniture retailer) location performance, ${state.range.s} to ${state.range.e}${state.cmpRange?`, compared vs ${state.cmpRange.s} to ${state.cmpRange.e}`:''}.
 UK totals: ${uk.s} sessions, ${uk.u} users, ${uk.t} transactions, £${uk.r.toFixed(0)} revenue, CVR ${(uk.s?uk.t/uk.s*100:0).toFixed(2)}%.
 TV region league (index = revenue per 1k TV households vs UK average = 100):
@@ -1111,6 +1122,7 @@ Top cities:
 ${cities}
 Campaign flights defined: ${flights}
 Promotion calendar: ${promos}
+Latest promotion comparison run in the dashboard: ${promoCmp}
 Known events: 30 Jun 2026 dining chair delivery moved to flat £15.`;
 }
 async function askAI(){
