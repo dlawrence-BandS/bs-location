@@ -1,0 +1,950 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>B&S · Location Performance</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+:root{
+  --paper:#F4F3EF; --panel:#FFFFFF; --ink:#18222E; --muted:#5E6B78; --line:#E3E1DA;
+  --onair:#C8404F; --onair-soft:rgba(200,64,79,.10);
+  --good:#2E7D4F; --bad:#B3372E;
+  --radius:10px;
+  font-size:15px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:'Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+h1,h2,h3,.display{font-family:'Space Grotesk',sans-serif}
+.num{font-variant-numeric:tabular-nums}
+
+/* header */
+header{background:var(--ink);color:#F2F1EC;padding:14px 22px;display:flex;flex-wrap:wrap;gap:14px;align-items:center;position:sticky;top:0;z-index:1000}
+header .brand h1{margin:0;font-size:1.15rem;letter-spacing:.02em}
+header .brand h1 .onair-dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--onair);margin-right:8px;vertical-align:2px;box-shadow:0 0 8px rgba(200,64,79,.8)}
+header .brand small{color:#9BA7B2;font-size:.72rem;letter-spacing:.08em;text-transform:uppercase}
+header .controls{margin-left:auto;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+header select,header input[type=date]{background:#243141;color:#F2F1EC;border:1px solid #35455A;border-radius:6px;padding:6px 8px;font-family:inherit;font-size:.8rem}
+header button{border:none;border-radius:6px;padding:7px 14px;font-weight:600;font-size:.8rem;cursor:pointer;font-family:'Space Grotesk'}
+#btnLoad{background:var(--onair);color:#fff}
+#btnLoad:disabled{opacity:.5;cursor:default}
+#btnAuth{background:#F2F1EC;color:var(--ink)}
+#authState{font-size:.72rem;color:#9BA7B2}
+
+/* tabs */
+nav{display:flex;gap:2px;padding:0 22px;background:var(--ink);overflow-x:auto}
+nav button{background:transparent;border:none;color:#9BA7B2;padding:10px 16px 12px;font-family:'Space Grotesk';font-weight:600;font-size:.85rem;cursor:pointer;border-bottom:3px solid transparent;white-space:nowrap}
+nav button.active{color:#fff;border-bottom-color:var(--onair)}
+nav button:hover{color:#fff}
+
+main{padding:20px 22px 60px;max-width:1420px;margin:0 auto}
+.tab{display:none}.tab.active{display:block}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;margin-bottom:16px}
+.panel h3{margin:0 0 4px;font-size:1rem}
+.panel .sub{color:var(--muted);font-size:.78rem;margin-bottom:12px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.grid2 > .panel{margin-bottom:0}
+@media(max-width:980px){.grid2{grid-template-columns:1fr}}
+
+/* KPI cards */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px}
+.kpi .label{font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.kpi .value{font-family:'Space Grotesk';font-weight:700;font-size:1.5rem;margin:4px 0 2px}
+.kpi .delta{font-size:.75rem;font-weight:600}
+.delta.up{color:var(--good)}.delta.down{color:var(--bad)}.delta.flat{color:var(--muted)}
+
+/* tables */
+table{width:100%;border-collapse:collapse;font-size:.82rem}
+th{font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);text-align:right;padding:6px 8px;border-bottom:2px solid var(--line);cursor:pointer;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th.left,td.left{text-align:left}
+td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+tr:hover td{background:#FAF9F5}
+.swatch{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:7px;vertical-align:0}
+.indexbar{display:inline-block;height:8px;border-radius:4px;background:var(--onair);vertical-align:1px}
+.indexbar.under{background:#C9C4B8}
+
+/* controls inside panels */
+.ctlrow{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px}
+.ctlrow label{font-size:.72rem;color:var(--muted);font-weight:600}
+.ctlrow select,.ctlrow input{border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-family:inherit;font-size:.8rem;background:#fff}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:20px;padding:4px 12px;font-size:.75rem;font-weight:600;cursor:pointer;background:#fff;user-select:none}
+.chip.on{border-color:currentColor}
+.chip .dot{width:8px;height:8px;border-radius:50%}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+button.action{background:var(--ink);color:#fff;border:none;border-radius:6px;padding:7px 14px;font-weight:600;font-size:.78rem;cursor:pointer;font-family:'Space Grotesk'}
+button.action.red{background:var(--onair)}
+button.ghost{background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:6px 12px;font-size:.75rem;cursor:pointer}
+.chartbox{position:relative;height:380px}
+.chartbox.tall{height:440px}
+.note{font-size:.72rem;color:var(--muted);margin-top:8px;line-height:1.5}
+
+/* map */
+#map{height:560px;border-radius:var(--radius);border:1px solid var(--line)}
+.maplegend{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px;font-size:.72rem}
+.maplegend span{display:inline-flex;align-items:center;gap:5px}
+
+/* flights */
+.flightcard{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px;font-size:.8rem;cursor:pointer}
+.flightcard.sel{border-color:var(--onair);background:var(--onair-soft)}
+.flightcard .fname{font-weight:700;font-family:'Space Grotesk'}
+.flightcard .fmeta{color:var(--muted);font-size:.72rem;margin-top:2px}
+.onairtag{display:inline-block;background:var(--onair);color:#fff;font-size:.6rem;font-weight:700;letter-spacing:.1em;padding:2px 7px;border-radius:3px;margin-right:6px}
+.formgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+.formgrid input,.formgrid select,.formgrid textarea{border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-family:inherit;font-size:.8rem;width:100%}
+.statrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin:12px 0}
+.stat{background:#FAF9F5;border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.stat .l{font-size:.65rem;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.statlabel{font-size:.65rem;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.statval{font-family:'Space Grotesk',sans-serif;font-size:1.35rem;font-weight:700;margin:2px 0}
+.statsub{font-size:.68rem;color:var(--muted)}
+th.sortable{cursor:pointer;user-select:none}
+th.sortable:hover{color:var(--onair)}
+.legitem{display:inline-flex;align-items:center;gap:5px}
+.stat .v{font-family:'Space Grotesk';font-weight:700;font-size:1.2rem;margin-top:2px}
+
+/* Ask AI drawer */
+#aiFab{position:fixed;bottom:22px;right:22px;z-index:1200;background:var(--ink);color:#fff;border:none;border-radius:24px;padding:12px 20px;font-family:'Space Grotesk';font-weight:600;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.25)}
+#aiDrawer{position:fixed;top:0;right:-460px;width:440px;max-width:95vw;height:100%;background:#fff;border-left:1px solid var(--line);z-index:1300;display:flex;flex-direction:column;transition:right .25s ease;box-shadow:-6px 0 24px rgba(0,0,0,.12)}
+#aiDrawer.open{right:0}
+#aiDrawer .aihead{background:var(--ink);color:#fff;padding:14px 16px;display:flex;justify-content:space-between;align-items:center}
+#aiMsgs{flex:1;overflow-y:auto;padding:14px;font-size:.83rem;line-height:1.5}
+.aimsg{margin-bottom:12px;padding:10px 12px;border-radius:8px;white-space:pre-wrap}
+.aimsg.user{background:var(--onair-soft);margin-left:30px}
+.aimsg.bot{background:#F4F3EF;margin-right:30px}
+#aiInputRow{display:flex;gap:8px;padding:12px;border-top:1px solid var(--line)}
+#aiInput{flex:1;border:1px solid var(--line);border-radius:6px;padding:8px;font-family:inherit;font-size:.83rem}
+#loadStatus{font-size:.75rem;color:#9BA7B2;min-width:110px;text-align:right}
+.spin{display:inline-block;width:12px;height:12px;border:2px solid #9BA7B2;border-top-color:#fff;border-radius:50%;animation:sp .8s linear infinite;vertical-align:-2px;margin-right:5px}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <h1><span class="onair-dot"></span>Location Performance</h1>
+    <small>Barker &amp; Stonehouse · GA4 by TV region, nation &amp; city</small>
+  </div>
+  <div class="controls">
+    <select id="preset">
+      <option value="28">Last 28 days</option>
+      <option value="90" selected>Last 90 days</option>
+      <option value="182">Last 6 months</option>
+      <option value="365">Last 12 months</option>
+      <option value="fy">FY to date (from 1 Apr)</option>
+      <option value="custom">Custom</option>
+    </select>
+    <input type="date" id="dateStart"> <input type="date" id="dateEnd">
+    <select id="compare">
+      <option value="yoy" selected>vs Year on year</option>
+      <option value="pop">vs Previous period</option>
+      <option value="none">No comparison</option>
+    </select>
+    <button id="btnLoad" disabled>Load data</button>
+    <span id="loadStatus"></span>
+    <button id="btnAuth">Sign in with Google</button>
+    <span id="authState"></span>
+  </div>
+</header>
+
+<nav>
+  <button data-tab="overview" class="active">Overview</button>
+  <button data-tab="trends">Trends</button>
+  <button data-tab="regions">TV Regions</button>
+  <button data-tab="cities">Cities</button>
+  <button data-tab="map">Map</button>
+  <button data-tab="channels">Channel Mix</button>
+  <button data-tab="flights">Campaign Impact</button>
+</nav>
+
+<main>
+
+<!-- ============ OVERVIEW ============ -->
+<div class="tab active" id="tab-overview">
+  <div class="kpis" id="kpiRow"></div>
+  <div class="grid2">
+    <div class="panel">
+      <h3>TV region league table</h3>
+      <div class="sub">UK traffic only. Index = revenue per 1,000 TV households vs UK average (100). Household figures are editable estimates in CONFIG.</div>
+      <div style="overflow-x:auto"><table id="leagueTable"></table></div>
+      <button class="ghost" style="margin-top:10px" onclick="exportLeague()">Export CSV</button>
+    </div>
+    <div class="panel">
+      <h3>Revenue share by TV region</h3>
+      <div class="sub">Share of UK revenue in the selected period.</div>
+      <div class="chartbox" style="height:300px"><canvas id="shareChart"></canvas></div>
+      <h3 style="margin-top:18px">Top cities</h3>
+      <div style="overflow-x:auto"><table id="topCitiesTable"></table></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ TRENDS ============ -->
+<div class="tab" id="tab-trends">
+  <div class="panel">
+    <div class="ctlrow">
+      <label>Metric</label><select id="trMetric"></select>
+      <label>Split by</label>
+      <select id="trDim">
+        <option value="tv">TV region</option>
+        <option value="nation">UK nation</option>
+        <option value="total">UK total</option>
+      </select>
+      <label>Granularity</label>
+      <select id="trGran"><option value="day">Day</option><option value="week" selected>Week</option><option value="month">Month</option></select>
+      <label><input type="checkbox" id="trSmooth"> 7-day avg (daily only)</label>
+      <label><input type="checkbox" id="trCompare" checked> Comparison overlay (dashed)</label>
+      <label><input type="checkbox" id="trFlights" checked> Show campaign flights</label>
+    </div>
+    <div class="chips" id="trChips" style="margin-bottom:12px"></div>
+    <div class="chartbox tall"><canvas id="trendChart"></canvas></div>
+    <div class="note">Comparison overlay aligns day-for-day (YoY uses -364 days so weekdays line up). Red bands are campaign flights from the Campaign Impact tab.</div>
+  </div>
+</div>
+
+<!-- ============ TV REGIONS ============ -->
+<div class="tab" id="tab-regions">
+  <div class="grid2">
+    <div class="panel">
+      <h3>Metric by TV region</h3>
+      <div class="ctlrow"><label>Metric</label><select id="rgMetric"></select></div>
+      <div class="chartbox"><canvas id="regionBarChart"></canvas></div>
+    </div>
+    <div class="panel">
+      <h3>Index per 1,000 TV households</h3>
+      <div class="sub">100 = UK average for the selected metric. Over-indexing regions punch above their population weight — under-indexers are headroom for media.</div>
+      <div class="chartbox"><canvas id="regionIndexChart"></canvas></div>
+    </div>
+  </div>
+  <div class="panel">
+    <h3>All metrics by TV region</h3>
+    <div style="overflow-x:auto"><table id="regionTable"></table></div>
+    <button class="ghost" style="margin-top:10px" onclick="exportRegionTable()">Export CSV</button>
+  </div>
+</div>
+
+<!-- ============ CITIES ============ -->
+<div class="tab" id="tab-cities">
+  <div class="panel">
+    <h3>City performance</h3>
+    <div class="ctlrow">
+      <input type="text" id="citySearch" placeholder="Search city or TV region…" style="min-width:220px">
+      <label>Min sessions</label><input type="number" id="cityMinSess" value="100" style="width:90px">
+      <span class="note" style="margin:0">Click a column header to sort. Deltas vs comparison period.</span>
+    </div>
+    <div style="overflow-x:auto;max-height:560px;overflow-y:auto"><table id="cityTable"></table></div>
+    <button class="ghost" style="margin-top:10px" onclick="exportCities()">Export CSV</button>
+  </div>
+  <div class="grid2">
+    <div class="panel"><h3>Top gainers (revenue vs comparison)</h3><div style="overflow-x:auto"><table id="gainersTable"></table></div></div>
+    <div class="panel"><h3>Top decliners (revenue vs comparison)</h3><div style="overflow-x:auto"><table id="declinersTable"></table></div></div>
+  </div>
+</div>
+
+<!-- ============ MAP ============ -->
+<div class="tab" id="tab-map">
+  <div class="panel">
+    <div class="ctlrow">
+      <label>Bubble size</label><select id="mapMetric"></select>
+      <label><input type="checkbox" id="mapStores"> Show B&amp;S stores</label>
+      <span class="note" style="margin:0" id="mapNote"></span>
+    </div>
+    <div id="map"></div>
+    <div class="maplegend" id="mapLegend"></div>
+  </div>
+</div>
+
+<!-- ============ CHANNELS ============ -->
+<div class="tab" id="tab-channels">
+  <div class="panel">
+    <h3>Channel mix by TV region</h3>
+    <div class="ctlrow">
+      <label>TV region</label><select id="chRegion"></select>
+      <label>Measure</label><select id="chMeasure"><option value="s">Sessions</option><option value="r">Revenue</option></select>
+      <label><input type="checkbox" id="chShare"> 100% share view</label>
+    </div>
+    <div class="chartbox tall"><canvas id="channelChart"></canvas></div>
+  </div>
+  <div class="panel">
+    <h3>TV halo view — Direct + Organic Search</h3>
+    <div class="sub">TV rarely gets click-through credit; it shows up as extra Direct and brand-search traffic in the regions where it aired. Weekly sessions, indexed to the first week of the period (100). Flights shaded.</div>
+    <div class="ctlrow"><div class="chips" id="haloChips"></div></div>
+    <div class="chartbox tall"><canvas id="haloChart"></canvas></div>
+  </div>
+</div>
+
+<!-- ============ CAMPAIGN IMPACT ============ -->
+<div class="tab" id="tab-flights">
+  <div class="grid2" style="grid-template-columns:380px 1fr">
+    <div class="panel">
+      <h3>Campaign flights</h3>
+      <div class="sub">Stored in this browser (localStorage). Export the JSON to share flight definitions with the agency.</div>
+      <div id="flightList"></div>
+      <h3 style="margin-top:16px">Add flight</h3>
+      <div class="formgrid">
+        <input id="fName" placeholder="Name (e.g. ITV Q1 Burst)">
+        <select id="fMedia"><option>TV</option><option>BVOD</option><option>TV + BVOD</option><option>Radio</option><option>Outdoor</option><option>Other</option></select>
+        <input type="date" id="fStart"><input type="date" id="fEnd">
+      </div>
+      <div class="formgrid" style="grid-template-columns:1fr 1fr">
+        <div><label style="font-size:.7rem;color:var(--muted);font-weight:600">Test regions (aired)</label><select id="fTest" multiple size="6"></select></div>
+        <div><label style="font-size:.7rem;color:var(--muted);font-weight:600">Control regions</label><select id="fCtrl" multiple size="6"></select></div>
+      </div>
+      <input id="fNotes" placeholder="Notes (budget, spots, agency…)" style="width:100%;border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-size:.8rem;margin-bottom:8px">
+      <button class="action red" onclick="addFlight()">Add flight</button>
+      <button class="ghost" onclick="exportFlights()">Export JSON</button>
+      <button class="ghost" onclick="document.getElementById('flightImport').click()">Import JSON</button>
+      <input type="file" id="flightImport" accept=".json" style="display:none" onchange="importFlights(event)">
+    </div>
+    <div class="panel">
+      <h3>Uplift analysis</h3>
+      <div class="ctlrow">
+        <label>Metric</label><select id="flMetric"></select>
+        <label>Baseline</label>
+        <select id="flBaseline"><option value="2">2 weeks pre</option><option value="4" selected>4 weeks pre</option><option value="6">6 weeks pre</option><option value="8">8 weeks pre</option></select>
+        <button class="action" onclick="runFlightAnalysis()">Run analysis</button>
+      </div>
+      <div id="flightStats" class="statrow"></div>
+      <div class="chartbox tall"><canvas id="flightChart"></canvas></div>
+      <div class="note" id="flightNote">Select a flight on the left, then Run analysis. Test and control regions are each indexed to their own pre-flight baseline average (100). If the test line separates from control during and after the flight, the campaign moved the needle. This is a directional geo-read, not a full econometric model — weather, promos and distribution differences between regions aren't controlled for. The 30 Jun 2026 delivery change and Spring Promotion are marked automatically.</div>
+    </div>
+  </div>
+</div>
+
+</main>
+
+<button id="aiFab">✦ Ask AI</button>
+<div id="aiDrawer">
+  <div class="aihead"><strong>Ask AI about this data</strong><button class="ghost" style="color:#fff;border-color:#546274" onclick="toggleAI(false)">Close</button></div>
+  <div id="aiMsgs"><div class="aimsg bot">Ask me anything about the loaded period — e.g. "Which TV regions under-index on revenue?" or "Summarise this for the media agency."</div></div>
+  <div id="aiInputRow"><input id="aiInput" placeholder="Ask a question…" onkeydown="if(event.key==='Enter')askAI()"><button class="action red" onclick="askAI()">Send</button></div>
+</div>
+
+<script>
+/* ================= CONFIG ================= */
+const PROJECT = 'commanding-air-450109-p0';
+const DATASET = 'geo_dashboard';
+const BQ_LOCATION = 'europe-west2';
+// OAuth client ID - copy from the Brand Performance dashboard (same GIS client works for both)
+const CLIENT_ID = '46227372300-rk63ag0caqgd7n12gjd0nt7f2qi7llqr.apps.googleusercontent.com';
+const AI_MODEL = 'claude-haiku-4-5';
+
+// ITV/BARB macro regions: [name, colour, TV households (millions) - EDITABLE ESTIMATES]
+const TV_REGIONS = [
+  ['London','#C8404F',4.95],
+  ['Midlands','#E08E2B',4.35],
+  ['North West','#3E6FA6',2.95],
+  ['South & South East','#D4699B',2.45],
+  ['Yorkshire','#4F9E52',2.35],
+  ['East','#8B5FBF',1.95],
+  ['West & South West','#B0892F',1.80],
+  ['Central Scotland','#7C9A3D',1.65],
+  ['Wales','#C75B39',1.25],
+  ['North East','#17A398',1.10],
+  ['Northern Ireland','#946B54',0.70],
+  ['North Scotland','#4FB3D9',0.55],
+  ['Border','#8C8C8C',0.30],
+];
+const TV_COLOR = Object.fromEntries(TV_REGIONS.map(r=>[r[0],r[1]]));
+TV_COLOR['UK - Other']='#B9B4AA'; TV_COLOR['Non-UK']='#D8D4CC';
+const TV_HH = Object.fromEntries(TV_REGIONS.map(r=>[r[0],r[2]]));
+const NATIONS = ['England','Scotland','Wales','Northern Ireland'];
+const CHANNELS = ['Paid Search','Paid Social','Organic Search','Organic Social','Direct','Email','Display','Affiliates','Referral','Other'];
+const CH_COLOR = {'Paid Search':'#3E6FA6','Paid Social':'#8B5FBF','Organic Search':'#4F9E52','Organic Social':'#7C9A3D','Direct':'#C8404F','Email':'#E08E2B','Display':'#D4699B','Affiliates':'#B0892F','Referral':'#17A398','Other':'#8C8C8C'};
+
+// EDIT ME - confirm/extend the store list before agency use
+const STORES = [
+  {name:'Teesside', lat:54.56, lng:-1.28},
+  {name:'Darlington', lat:54.52, lng:-1.55},
+  {name:'Newcastle', lat:54.97, lng:-1.60},
+  {name:'Leeds (Birstall)', lat:53.73, lng:-1.66},
+  {name:'York', lat:53.99, lng:-1.09},
+  {name:'Nottingham', lat:52.93, lng:-1.20},
+  {name:'Hove', lat:50.84, lng:-0.18},
+];
+
+// Auto event markers (from previous analyses)
+const AUTO_EVENTS = [
+  {date:'2026-03-01', label:'Spring Promotion'},
+  {date:'2026-06-30', label:'Dining chair delivery change (flat £15)'},
+];
+
+const METRICS = {
+  sessions:{label:'Sessions',fmt:'num',base:'s'},
+  users:{label:'Users',fmt:'num',base:'u'},
+  new_users:{label:'New users',fmt:'num',base:'nu'},
+  engaged:{label:'Engaged sessions',fmt:'num',base:'es'},
+  eng_rate:{label:'Engagement rate',fmt:'pct',calc:a=>a.s?a.es/a.s:0},
+  transactions:{label:'Transactions',fmt:'num',base:'t'},
+  revenue:{label:'Revenue',fmt:'gbp',base:'r'},
+  cvr:{label:'Conversion rate',fmt:'pct',calc:a=>a.s?a.t/a.s:0},
+  aov:{label:'AOV',fmt:'gbp2',calc:a=>a.t?a.r/a.t:0},
+  rps:{label:'Revenue / session',fmt:'gbp2',calc:a=>a.s?a.r/a.s:0},
+};
+
+const CITY_COORDS={"England|London":[51.51,-0.13],"England|Croydon":[51.37,-0.1],"England|Bromley":[51.41,0.02],"England|Ilford":[51.56,0.07],"England|Romford":[51.58,0.18],"England|Enfield":[51.65,-0.08],"England|Harrow":[51.58,-0.34],"England|Kingston upon Thames":[51.41,-0.3],"England|Sutton":[51.36,-0.19],"England|Twickenham":[51.45,-0.34],"England|Watford":[51.66,-0.4],"England|Slough":[51.51,-0.59],"England|St Albans":[51.75,-0.34],"England|Woking":[51.32,-0.56],"England|Guildford":[51.24,-0.57],"England|Dartford":[51.44,0.22],"England|Hemel Hempstead":[51.75,-0.47],"England|High Wycombe":[51.63,-0.75],"England|Harlow":[51.77,0.11],"England|Epsom":[51.33,-0.27],"England|Birmingham":[52.49,-1.9],"England|Coventry":[52.41,-1.51],"England|Wolverhampton":[52.59,-2.11],"England|Leicester":[52.64,-1.13],"England|Nottingham":[52.95,-1.15],"England|Derby":[52.92,-1.48],"England|Stoke-on-Trent":[53.0,-2.18],"England|Walsall":[52.59,-1.98],"England|Dudley":[52.51,-2.09],"England|Solihull":[52.41,-1.78],"England|West Bromwich":[52.52,-1.99],"England|Sutton Coldfield":[52.57,-1.82],"England|Northampton":[52.24,-0.9],"England|Telford":[52.68,-2.45],"England|Shrewsbury":[52.71,-2.75],"England|Worcester":[52.19,-2.22],"England|Redditch":[52.31,-1.94],"England|Tamworth":[52.63,-1.69],"England|Nuneaton":[52.52,-1.47],"England|Burton upon Trent":[52.81,-1.64],"England|Kettering":[52.4,-0.73],"England|Corby":[52.49,-0.69],"England|Rugby":[52.37,-1.26],"England|Loughborough":[52.77,-1.21],"England|Mansfield":[53.14,-1.2],"England|Hereford":[52.06,-2.72],"England|Stafford":[52.81,-2.12],"England|Cannock":[52.69,-2.03],"England|Manchester":[53.48,-2.24],"England|Liverpool":[53.41,-2.98],"England|Bolton":[53.58,-2.43],"England|Stockport":[53.41,-2.16],"England|Salford":[53.49,-2.29],"England|Wigan":[53.55,-2.63],"England|Warrington":[53.39,-2.6],"England|Oldham":[53.54,-2.11],"England|Rochdale":[53.61,-2.16],"England|St Helens":[53.45,-2.74],"England|Bury":[53.59,-2.3],"England|Preston":[53.76,-2.7],"England|Blackpool":[53.82,-3.05],"England|Blackburn":[53.75,-2.48],"England|Burnley":[53.79,-2.24],"England|Chester":[53.19,-2.89],"England|Crewe":[53.1,-2.44],"England|Macclesfield":[53.26,-2.13],"England|Southport":[53.65,-3.01],"England|Birkenhead":[53.39,-3.01],"England|Runcorn":[53.34,-2.73],"England|Lancaster":[54.05,-2.8],"England|Leeds":[53.8,-1.55],"England|Sheffield":[53.38,-1.47],"England|Bradford":[53.8,-1.75],"England|Kingston upon Hull":[53.75,-0.34],"England|Hull":[53.75,-0.34],"England|York":[53.96,-1.08],"England|Wakefield":[53.68,-1.5],"England|Huddersfield":[53.65,-1.78],"England|Doncaster":[53.52,-1.13],"England|Rotherham":[53.43,-1.36],"England|Barnsley":[53.55,-1.48],"England|Halifax":[53.72,-1.86],"England|Harrogate":[54.0,-1.54],"England|Grimsby":[53.57,-0.08],"England|Scunthorpe":[53.59,-0.65],"England|Lincoln":[53.23,-0.54],"England|Keighley":[53.87,-1.9],"England|Castleford":[53.73,-1.36],"England|Chesterfield":[53.24,-1.42],"England|Newcastle upon Tyne":[54.98,-1.61],"England|Sunderland":[54.91,-1.38],"England|Middlesbrough":[54.57,-1.23],"England|Gateshead":[54.95,-1.6],"England|Durham":[54.78,-1.58],"England|Darlington":[54.52,-1.55],"England|Hartlepool":[54.69,-1.21],"England|Stockton-on-Tees":[54.57,-1.32],"England|South Shields":[55.0,-1.43],"England|Washington":[54.9,-1.52],"England|Norwich":[52.63,1.3],"England|Ipswich":[52.06,1.16],"England|Cambridge":[52.21,0.12],"England|Peterborough":[52.57,-0.24],"England|Colchester":[51.89,0.9],"England|Chelmsford":[51.74,0.47],"England|Southend-on-Sea":[51.54,0.71],"England|Basildon":[51.58,0.49],"England|Luton":[51.88,-0.42],"England|Bedford":[52.14,-0.47],"England|Milton Keynes":[52.04,-0.76],"England|King's Lynn":[52.75,0.4],"England|Great Yarmouth":[52.61,1.73],"England|Lowestoft":[52.48,1.75],"England|Bury St Edmunds":[52.25,0.71],"England|Stevenage":[51.9,-0.2],"England|Southampton":[50.9,-1.4],"England|Portsmouth":[50.8,-1.09],"England|Brighton":[50.83,-0.14],"England|Brighton and Hove":[50.83,-0.14],"England|Reading":[51.45,-0.98],"England|Oxford":[51.75,-1.26],"England|Bournemouth":[50.72,-1.88],"England|Poole":[50.72,-1.98],"England|Basingstoke":[51.27,-1.09],"England|Winchester":[51.06,-1.31],"England|Eastbourne":[50.77,0.28],"England|Hastings":[50.85,0.57],"England|Crawley":[51.11,-0.19],"England|Worthing":[50.81,-0.37],"England|Maidstone":[51.27,0.52],"England|Canterbury":[51.28,1.08],"England|Ashford":[51.15,0.87],"England|Gillingham":[51.39,0.55],"England|Chatham":[51.38,0.53],"England|Royal Tunbridge Wells":[51.13,0.26],"England|Tunbridge Wells":[51.13,0.26],"England|Salisbury":[51.07,-1.79],"England|Andover":[51.21,-1.48],"England|Aldershot":[51.25,-0.76],"England|Farnborough":[51.29,-0.75],"England|Newbury":[51.4,-1.32],"England|Bracknell":[51.42,-0.75],"England|Maidenhead":[51.52,-0.72],"England|Bristol":[51.45,-2.59],"England|Bath":[51.38,-2.36],"England|Gloucester":[51.86,-2.24],"England|Cheltenham":[51.9,-2.07],"England|Swindon":[51.56,-1.78],"England|Plymouth":[50.38,-4.14],"England|Exeter":[50.72,-3.53],"England|Torquay":[50.46,-3.53],"England|Taunton":[51.02,-3.1],"England|Truro":[50.26,-5.05],"England|Weston-super-Mare":[51.35,-2.98],"England|Yeovil":[50.94,-2.63],"England|Bridgwater":[51.13,-3.0],"England|Barnstaple":[51.08,-4.06],"England|Stroud":[51.75,-2.22],"Wales|Cardiff":[51.48,-3.18],"Wales|Swansea":[51.62,-3.94],"Wales|Newport":[51.58,-3.0],"Wales|Wrexham":[53.05,-3.0],"Wales|Barry":[51.4,-3.28],"Wales|Neath":[51.66,-3.81],"Wales|Cwmbran":[51.65,-3.02],"Wales|Bridgend":[51.5,-3.58],"Wales|Llanelli":[51.68,-4.16],"Wales|Merthyr Tydfil":[51.75,-3.38],"Wales|Bangor":[53.23,-4.13],"Wales|Aberystwyth":[52.41,-4.08],"Scotland|Glasgow":[55.86,-4.25],"Scotland|Edinburgh":[55.95,-3.19],"Scotland|Stirling":[56.12,-3.94],"Scotland|Falkirk":[56.0,-3.78],"Scotland|Dunfermline":[56.07,-3.44],"Scotland|Kirkcaldy":[56.11,-3.16],"Scotland|Livingston":[55.9,-3.52],"Scotland|Paisley":[55.85,-4.42],"Scotland|East Kilbride":[55.76,-4.18],"Scotland|Hamilton":[55.78,-4.05],"Scotland|Kilmarnock":[55.61,-4.5],"Scotland|Ayr":[55.46,-4.63],"Scotland|Motherwell":[55.79,-4.0],"Scotland|Coatbridge":[55.86,-4.03],"Scotland|Cumbernauld":[55.95,-3.99],"Scotland|Greenock":[55.95,-4.76],"Scotland|Aberdeen":[57.15,-2.09],"Scotland|Dundee":[56.46,-2.97],"Scotland|Inverness":[57.48,-4.22],"Scotland|Perth":[56.4,-3.44],"Scotland|Elgin":[57.65,-3.32],"Scotland|Arbroath":[56.56,-2.59],"England|Carlisle":[54.89,-2.94],"Scotland|Dumfries":[55.07,-3.61],"England|Workington":[54.64,-3.55],"England|Whitehaven":[54.55,-3.59],"England|Penrith":[54.66,-2.75],"England|Kendal":[54.33,-2.75],"Scotland|Galashiels":[55.62,-2.81],"Scotland|Hawick":[55.42,-2.79],"England|Berwick-upon-Tweed":[55.77,-2.0],"Northern Ireland|Belfast":[54.6,-5.93],"Northern Ireland|Londonderry":[55.0,-7.31],"Northern Ireland|Derry":[55.0,-7.31],"Northern Ireland|Lisburn":[54.51,-6.04],"Northern Ireland|Newtownabbey":[54.66,-5.9],"Northern Ireland|Bangor":[54.65,-5.67],"Northern Ireland|Craigavon":[54.45,-6.39],"Northern Ireland|Ballymena":[54.86,-6.28]};
+
+/* ================= FORMATTERS / HELPERS ================= */
+const $=id=>document.getElementById(id);
+const fmtNum=v=>v==null?'–':Math.round(v).toLocaleString('en-GB');
+const fmtGBP=v=>v==null?'–':'£'+Math.round(v).toLocaleString('en-GB');
+const fmtGBP2=v=>v==null?'–':'£'+v.toLocaleString('en-GB',{minimumFractionDigits:2,maximumFractionDigits:2});
+const fmtPct=v=>v==null?'–':(v*100).toFixed(1)+'%';
+const FMT={num:fmtNum,gbp:fmtGBP,gbp2:fmtGBP2,pct:fmtPct};
+const mVal=(agg,key)=>{const m=METRICS[key];return m.base?(agg[m.base]||0):m.calc(agg)};
+const mFmt=(key,v)=>FMT[METRICS[key].fmt](v);
+function deltaBadge(cur,prev){
+  if(prev==null||prev===0||cur==null)return '<span class="delta flat">–</span>';
+  const d=(cur-prev)/Math.abs(prev), cls=d>0.001?'up':d<-0.001?'down':'flat', arrow=d>0.001?'▲':d<-0.001?'▼':'●';
+  return `<span class="delta ${cls}">${arrow} ${(Math.abs(d)*100).toFixed(1)}%</span>`;
+}
+const iso=d=>d.toISOString().slice(0,10);
+const addDays=(s,n)=>{const d=new Date(s+'T00:00:00Z');d.setUTCDate(d.getUTCDate()+n);return iso(d)};
+function bucket(dateStr,gran){
+  if(gran==='day')return dateStr;
+  const d=new Date(dateStr+'T00:00:00Z');
+  if(gran==='month')return dateStr.slice(0,7)+'-01';
+  const dow=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-dow); return iso(d);
+}
+function sumRows(rows){const a={s:0,u:0,nu:0,es:0,t:0,r:0};rows.forEach(x=>{a.s+=+x.s;a.u+=+x.u;a.nu+=+x.nu||0;a.es+=+x.es;a.t+=+x.t;a.r+=+x.r});return a;}
+function exportCSV(name,header,rows){
+  const csv=[header.join(','),...rows.map(r=>r.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(','))].join('\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download=name;a.click();
+}
+
+/* ================= AUTH (Google Identity Services) ================= */
+let accessToken=null, tokenClient=null, tokenExpiry=0;
+window.addEventListener('load',()=>{
+  const init=()=>{ if(!window.google||!google.accounts){setTimeout(init,300);return;}
+    tokenClient=google.accounts.oauth2.initTokenClient({
+      client_id:CLIENT_ID, scope:'https://www.googleapis.com/auth/bigquery.readonly',
+      callback:t=>{accessToken=t.access_token;tokenExpiry=Date.now()+(t.expires_in-60)*1000;
+        $('authState').textContent='Signed in';$('btnAuth').textContent='Re-authorise';$('btnLoad').disabled=false;loadData();}
+    });
+  }; init();
+});
+$('btnAuth').onclick=()=>tokenClient?tokenClient.requestAccessToken():alert('Google sign-in still loading — try again in a second.');
+async function ensureToken(){ if(accessToken&&Date.now()<tokenExpiry)return; return new Promise(res=>{const orig=tokenClient.callback;tokenClient.callback=t=>{orig(t);res();};tokenClient.requestAccessToken({prompt:''});}); }
+
+/* ================= BIGQUERY ================= */
+async function runQuery(sql){
+  await ensureToken();
+  let url=`https://bigquery.googleapis.com/bigquery/v2/projects/${PROJECT}/queries`;
+  let resp=await fetch(url,{method:'POST',headers:{Authorization:'Bearer '+accessToken,'Content-Type':'application/json'},
+    body:JSON.stringify({query:sql,useLegacySql:false,location:BQ_LOCATION,maxResults:50000,timeoutMs:60000})});
+  let data=await resp.json();
+  if(data.error)throw new Error(data.error.message);
+  let fields=data.schema.fields.map(f=>f.name), rows=(data.rows||[]).map(r=>Object.fromEntries(r.f.map((c,i)=>[fields[i],c.v])));
+  while(data.pageToken){
+    resp=await fetch(`https://bigquery.googleapis.com/bigquery/v2/projects/${PROJECT}/queries/${data.jobReference.jobId}?location=${BQ_LOCATION}&pageToken=${data.pageToken}&maxResults=50000`,
+      {headers:{Authorization:'Bearer '+accessToken}});
+    data=await resp.json();
+    rows.push(...(data.rows||[]).map(r=>Object.fromEntries(r.f.map((c,i)=>[fields[i],c.v]))));
+  }
+  return rows;
+}
+const T=t=>`\`${PROJECT}.${DATASET}.${t}\``;
+
+/* ================= STATE & DATA LOAD ================= */
+const state={range:null,cmpRange:null,cur:null,cmp:null,charts:{},mapObj:null,selFlight:null};
+
+function computeRange(){
+  const p=$('preset').value;const today=new Date();const end=iso(new Date(today.getTime()-86400000));
+  let start;
+  if(p==='custom'){start=$('dateStart').value;return {s:start,e:$('dateEnd').value||end};}
+  if(p==='fy'){const y=today.getUTCMonth()>=3?today.getUTCFullYear():today.getUTCFullYear()-1;start=`${y}-04-01`;}
+  else start=addDays(end,-(+p-1));
+  $('dateStart').value=start;$('dateEnd').value=end;
+  return {s:start,e:end};
+}
+function computeCmpRange(r){
+  const mode=$('compare').value; if(mode==='none')return null;
+  if(mode==='yoy')return {s:addDays(r.s,-364),e:addDays(r.e,-364)};
+  const days=Math.round((new Date(r.e)-new Date(r.s))/86400000)+1;
+  return {s:addDays(r.s,-days),e:addDays(r.s,-1)};
+}
+async function fetchPeriod(r,withChan){
+  const w=`date BETWEEN '${r.s}' AND '${r.e}'`;
+  const q1=runQuery(`SELECT FORMAT_DATE('%Y-%m-%d',date) d, tv_region tv, SUM(sessions) s, SUM(users) u, SUM(new_users) nu, SUM(engaged_sessions) es, SUM(transactions) t, ROUND(SUM(revenue),2) r FROM ${T('geo_daily')} WHERE ${w} GROUP BY 1,2 ORDER BY 1`);
+  const q2=runQuery(`SELECT region rg, city, ANY_VALUE(tv_region) tv, SUM(sessions) s, SUM(users) u, SUM(new_users) nu, SUM(engaged_sessions) es, SUM(transactions) t, ROUND(SUM(revenue),2) r FROM ${T('geo_daily')} WHERE ${w} AND country='United Kingdom' AND city!='(not set)' GROUP BY 1,2 ORDER BY s DESC LIMIT 400`);
+  const q3=withChan?runQuery(`SELECT FORMAT_DATE('%Y-%m-%d',DATE_TRUNC(date,WEEK(MONDAY))) wk, tv_region tv, channel c, SUM(sessions) s, ROUND(SUM(revenue),2) r FROM ${T('geo_channel_daily')} WHERE ${w} GROUP BY 1,2,3 ORDER BY 1`):Promise.resolve(null);
+  const q4=runQuery(`SELECT FORMAT_DATE('%Y-%m-%d',date) d, region rg, SUM(sessions) s, SUM(users) u, SUM(new_users) nu, SUM(engaged_sessions) es, SUM(transactions) t, ROUND(SUM(revenue),2) r FROM ${T('geo_daily')} WHERE ${w} AND country='United Kingdom' GROUP BY 1,2 ORDER BY 1`);
+  const [daily,cities,chan,nations]=await Promise.all([q1,q2,q3,q4]);
+  return {daily,cities,chan,nations};
+}
+async function loadData(){
+  try{
+    $('btnLoad').disabled=true;$('loadStatus').innerHTML='<span class="spin"></span>Loading…';
+    state.range=computeRange(); state.cmpRange=computeCmpRange(state.range);
+    const jobs=[fetchPeriod(state.range,true)];
+    if(state.cmpRange)jobs.push(fetchPeriod(state.cmpRange,false));
+    const res=await Promise.all(jobs);
+    state.cur=res[0]; state.cmp=state.cmpRange?res[1]:null;
+    renderAll();
+    $('loadStatus').textContent=`${state.range.s} → ${state.range.e}`;
+  }catch(e){ console.error(e); $('loadStatus').textContent='Error'; alert('Query failed: '+e.message); }
+  finally{ $('btnLoad').disabled=false; }
+}
+$('btnLoad').onclick=loadData;
+$('preset').onchange=()=>{ if($('preset').value!=='custom')computeRange(); };
+
+/* ================= TABS ================= */
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active'); $('tab-'+b.dataset.tab).classList.add('active');
+  if(b.dataset.tab==='map'&&state.cur)setTimeout(renderMap,50);
+});
+
+/* ================= FLIGHT BANDS PLUGIN (signature: ON AIR strips) ================= */
+const flightBands={id:'flightBands',beforeDatasetsDraw(chart){
+  const bands=chart.config.options.flightBands||[]; if(!bands.length)return;
+  const {ctx,chartArea,scales:{x}}=chart, labels=chart.data.labels;
+  bands.forEach(b=>{
+    let i1=labels.findIndex(l=>l>=b.from); let i2=-1;
+    for(let i=labels.length-1;i>=0;i--){if(labels[i]<=b.to){i2=i;break;}}
+    if(i1===-1||i2===-1||i2<i1)return;
+    const px1=Math.max(x.getPixelForValue(i1)-4,chartArea.left), px2=Math.min(x.getPixelForValue(i2)+4,chartArea.right);
+    ctx.save();
+    ctx.fillStyle=b.color||'rgba(200,64,79,.10)';
+    ctx.fillRect(px1,chartArea.top,px2-px1,chartArea.bottom-chartArea.top);
+    ctx.fillStyle=b.solid||'rgba(200,64,79,.85)';
+    ctx.fillRect(px1,chartArea.top,px2-px1,4);
+    ctx.font='600 9px Space Grotesk'; ctx.fillStyle='#C8404F'; ctx.textAlign='left';
+    ctx.fillText((b.tag||'ON AIR')+' · '+b.label,px1+3,chartArea.top+16);
+    ctx.restore();
+  });
+}};
+Chart.register(flightBands);
+Chart.defaults.font.family='Inter'; Chart.defaults.color='#5E6B78';
+function destroyChart(k){ if(state.charts[k]){state.charts[k].destroy();delete state.charts[k];} }
+function flightBandsFor(labels){
+  if(!labels||!labels.length)return[];
+  const bands=getFlights().map(f=>({from:f.start,to:f.end,label:f.name,tag:'ON AIR'}));
+  AUTO_EVENTS.forEach(ev=>{ if(ev.date>=labels[0]&&ev.date<=labels[labels.length-1])
+    bands.push({from:ev.date,to:ev.date,label:ev.label,tag:'EVENT',color:'rgba(24,34,46,.06)',solid:'rgba(24,34,46,.5)'}); });
+  return bands;
+}
+
+/* ================= RENDER: SETUP ================= */
+function fillMetricSelect(id,def){ const s=$(id); s.innerHTML=Object.entries(METRICS).map(([k,m])=>`<option value="${k}" ${k===def?'selected':''}>${m.label}</option>`).join(''); }
+['trMetric','rgMetric','mapMetric','flMetric'].forEach((id,i)=>fillMetricSelect(id,['sessions','revenue','sessions','sessions'][i]));
+(function(){ const opts=TV_REGIONS.map(r=>`<option>${r[0]}</option>`).join('');
+  $('chRegion').innerHTML=`<option value="ALL">All UK regions</option>`+opts+`<option>UK - Other</option>`;
+  $('fTest').innerHTML=opts; $('fCtrl').innerHTML=opts; })();
+
+const ukDaily=rows=>rows.filter(r=>r.tv!=='Non-UK');
+function renderAll(){
+  renderKPIs(); renderLeague(); renderShare(); renderTopCities();
+  buildTrendChips(); renderTrends(); renderRegions(); renderCities();
+  renderChannels(); renderHalo(); renderFlightList();
+  if($('tab-map').classList.contains('active'))renderMap();
+}
+
+/* ================= OVERVIEW ================= */
+function renderKPIs(){
+  const cur=sumRows(ukDaily(state.cur.daily));
+  const cmp=state.cmp?sumRows(ukDaily(state.cmp.daily)):null;
+  const keys=['sessions','users','revenue','transactions','cvr','aov'];
+  $('kpiRow').innerHTML=keys.map(k=>{
+    const v=mVal(cur,k), p=cmp?mVal(cmp,k):null;
+    return `<div class="kpi"><div class="label">${METRICS[k].label} <span style="opacity:.6">· UK</span></div>
+      <div class="value num">${mFmt(k,v)}</div><div>${deltaBadge(v,p)}</div></div>`;
+  }).join('');
+}
+function regionAggs(period){
+  const map={}; ukDaily(period.daily).forEach(r=>{ (map[r.tv]=map[r.tv]||[]).push(r); });
+  return Object.fromEntries(Object.entries(map).map(([k,v])=>[k,sumRows(v)]));
+}
+function renderLeague(){
+  const cur=regionAggs(state.cur), cmp=state.cmp?regionAggs(state.cmp):{};
+  const ukTot=sumRows(ukDaily(state.cur.daily));
+  const totHH=TV_REGIONS.reduce((a,r)=>a+r[2],0);
+  const ukRevPerK=ukTot.r/(totHH*1000);
+  const rows=TV_REGIONS.map(([name])=>{
+    const a=cur[name]||{s:0,u:0,nu:0,es:0,t:0,r:0}, p=cmp[name];
+    const perK=a.r/(TV_HH[name]*1000), idx=ukRevPerK?perK/ukRevPerK*100:0;
+    return {name,a,p,perK,idx};
+  }).sort((x,y)=>y.a.r-x.a.r);
+  const maxIdx=Math.max(...rows.map(r=>r.idx),120);
+  $('leagueTable').innerHTML=`<tr><th class="left">TV region</th><th>Sessions</th><th>Revenue</th><th>Δ Rev</th><th>CVR</th><th>Rev / 1k HH</th><th class="left" style="min-width:130px">Index (UK=100)</th></tr>`+
+    rows.map(r=>`<tr><td class="left"><span class="swatch" style="background:${TV_COLOR[r.name]}"></span>${r.name}</td>
+      <td class="num">${fmtNum(r.a.s)}</td><td class="num">${fmtGBP(r.a.r)}</td>
+      <td>${deltaBadge(r.a.r,r.p?r.p.r:null)}</td>
+      <td class="num">${fmtPct(r.a.s?r.a.t/r.a.s:0)}</td><td class="num">${fmtGBP(r.perK)}</td>
+      <td class="left num"><span class="indexbar ${r.idx<100?'under':''}" style="width:${Math.max(r.idx/maxIdx*110,3)}px"></span> ${r.idx.toFixed(0)}</td></tr>`).join('');
+  state._league=rows;
+}
+function exportLeague(){ exportCSV('tv_region_league.csv',['tv_region','sessions','users','revenue','transactions','cvr','rev_per_1k_hh','index'],
+  state._league.map(r=>[r.name,r.a.s,r.a.u,r.a.r.toFixed(2),r.a.t,(r.a.s?r.a.t/r.a.s*100:0).toFixed(2)+'%',r.perK.toFixed(2),r.idx.toFixed(0)])); }
+function renderShare(){
+  destroyChart('share');
+  const aggs=regionAggs(state.cur);
+  const names=TV_REGIONS.map(r=>r[0]).filter(n=>aggs[n]);
+  state.charts.share=new Chart($('shareChart'),{type:'doughnut',
+    data:{labels:names,datasets:[{data:names.map(n=>aggs[n].r),backgroundColor:names.map(n=>TV_COLOR[n]),borderWidth:1,borderColor:'#fff'}]},
+    options:{maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{boxWidth:10,font:{size:10}}},
+      tooltip:{callbacks:{label:c=>` ${c.label}: ${fmtGBP(c.parsed)} (${(c.parsed/c.dataset.data.reduce((a,b)=>a+b,0)*100).toFixed(1)}%)`}}}}});
+}
+function renderTopCities(){
+  const rows=state.cur.cities.slice(0,10);
+  $('topCitiesTable').innerHTML=`<tr><th class="left">City</th><th class="left">TV region</th><th>Sessions</th><th>Revenue</th><th>CVR</th></tr>`+
+    rows.map(c=>`<tr><td class="left">${c.city}</td><td class="left"><span class="swatch" style="background:${TV_COLOR[c.tv]||'#B9B4AA'}"></span>${c.tv}</td>
+      <td class="num">${fmtNum(+c.s)}</td><td class="num">${fmtGBP(+c.r)}</td><td class="num">${fmtPct(+c.s? +c.t/+c.s:0)}</td></tr>`).join('');
+}
+
+/* ================= TRENDS ================= */
+let trSel=new Set(['London','Midlands','North East','Yorkshire']);
+function buildTrendChips(){
+  const dim=$('trDim').value, box=$('trChips');
+  if(dim==='total'){box.innerHTML='';return;}
+  const items=dim==='tv'?TV_REGIONS.map(r=>r[0]):NATIONS;
+  box.innerHTML=items.map(n=>{
+    const col=dim==='tv'?TV_COLOR[n]:'#3E6FA6', on=trSel.has(n);
+    return `<span class="chip ${on?'on':''}" data-n="${n}" style="color:${on?col:'#5E6B78'}"><span class="dot" style="background:${col};opacity:${on?1:.3}"></span>${n}</span>`;
+  }).join('');
+  box.querySelectorAll('.chip').forEach(ch=>ch.onclick=()=>{ const n=ch.dataset.n; trSel.has(n)?trSel.delete(n):trSel.add(n); buildTrendChips(); renderTrends(); });
+}
+function seriesFrom(rows,keyFn,metric,gran,smooth){
+  const buckets={};
+  rows.forEach(r=>{ const b=bucket(r.d,gran), k=keyFn(r); if(k==null)return;
+    const o=((buckets[b]=buckets[b]||{})[k]=buckets[b][k]||{s:0,u:0,nu:0,es:0,t:0,r:0});
+    o.s+=+r.s;o.u+=+r.u;o.nu+=+r.nu||0;o.es+=+r.es;o.t+=+r.t;o.r+=+r.r; });
+  const labels=Object.keys(buckets).sort();
+  const keys=[...new Set(labels.flatMap(l=>Object.keys(buckets[l])))];
+  const out={};
+  keys.forEach(k=>{ let arr=labels.map(l=>buckets[l][k]?mVal(buckets[l][k],metric):null);
+    if(smooth&&gran==='day')arr=arr.map((_,i)=>{const w=arr.slice(Math.max(0,i-6),i+1).filter(v=>v!=null);return w.length?w.reduce((a,b)=>a+b,0)/w.length:null;});
+    out[k]=arr; });
+  return {labels,series:out};
+}
+function renderTrends(){
+  if(!state.cur)return; destroyChart('trend');
+  const metric=$('trMetric').value, dim=$('trDim').value, gran=$('trGran').value, smooth=$('trSmooth').checked;
+  const keyFn=dim==='tv'?(r=>trSel.has(r.tv)?r.tv:null):dim==='nation'?(r=>trSel.has(r.rg)?r.rg:null):(r=>'UK');
+  const src=dim==='nation'?state.cur.nations:ukDaily(state.cur.daily);
+  const {labels,series}=seriesFrom(src,keyFn,metric,gran,smooth);
+  const ds=Object.entries(series).map(([k,arr])=>({label:k,data:arr,borderColor:dim==='tv'?TV_COLOR[k]:(dim==='nation'?{England:'#3E6FA6',Scotland:'#7C9A3D',Wales:'#C75B39','Northern Ireland':'#946B54'}[k]:'#C8404F'),
+    borderWidth:2,pointRadius:0,tension:.25}));
+  if(state.cmp&&$('trCompare').checked){
+    const cmpSrc=dim==='nation'?state.cmp.nations:ukDaily(state.cmp.daily);
+    const cmpRes=seriesFrom(cmpSrc,keyFn,metric,gran,smooth);
+    Object.entries(cmpRes.series).forEach(([k,arr])=>{
+      ds.push({label:k+' (prev)',data:arr.slice(0,labels.length),borderColor:(dim==='tv'?TV_COLOR[k]:'#9BA7B2')+'',borderDash:[5,4],borderWidth:1.4,pointRadius:0,tension:.25,hidden:false});
+    });
+  }
+  state.charts.trend=new Chart($('trendChart'),{type:'line',data:{labels,datasets:ds},
+    options:{maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+      flightBands:$('trFlights').checked?flightBandsFor(labels):[],
+      plugins:{legend:{labels:{boxWidth:14,font:{size:10},filter:i=>!i.text.endsWith('(prev)')}},
+        tooltip:{callbacks:{label:c=>` ${c.dataset.label}: ${mFmt(metric,c.parsed.y)}`}}},
+      scales:{y:{ticks:{callback:v=>METRICS[metric].fmt==='pct'?(v*100).toFixed(0)+'%':METRICS[metric].fmt.startsWith('gbp')?'£'+v.toLocaleString():v.toLocaleString()}},x:{ticks:{maxTicksLimit:14}}}}});
+}
+['trMetric','trDim','trGran','trSmooth','trCompare','trFlights'].forEach(id=>$(id).onchange=()=>{ if(id==='trDim'){trSel=new Set(($('trDim').value==='nation'?NATIONS:TV_REGIONS.map(r=>r[0])).slice(0,4));buildTrendChips();} renderTrends(); });
+
+/* ================= TV REGIONS TAB ================= */
+function renderRegions(){
+  destroyChart('rgBar'); destroyChart('rgIdx');
+  const metric=$('rgMetric').value;
+  const cur=regionAggs(state.cur);
+  const rows=TV_REGIONS.map(([n])=>({n,v:cur[n]?mVal(cur[n],metric):0})).sort((a,b)=>b.v-a.v);
+  state.charts.rgBar=new Chart($('regionBarChart'),{type:'bar',
+    data:{labels:rows.map(r=>r.n),datasets:[{data:rows.map(r=>r.v),backgroundColor:rows.map(r=>TV_COLOR[r.n])}]},
+    options:{maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+mFmt(metric,c.parsed.x)}}},
+      scales:{x:{ticks:{callback:v=>METRICS[metric].fmt==='pct'?(v*100).toFixed(0)+'%':v.toLocaleString()}}}}});
+  // index: metric per 1k households vs UK avg (rate metrics indexed directly vs UK rate)
+  const ukAgg=sumRows(ukDaily(state.cur.daily)); const totHH=TV_REGIONS.reduce((a,r)=>a+r[2],0);
+  const isRate=!METRICS[metric].base||['eng_rate','cvr','aov','rps'].includes(metric);
+  const ukBase=isRate?mVal(ukAgg,metric):mVal(ukAgg,metric)/(totHH*1000);
+  const idxRows=TV_REGIONS.map(([n,,hh])=>{ const a=cur[n]; if(!a)return{n,idx:0};
+    const v=isRate?mVal(a,metric):mVal(a,metric)/(hh*1000); return {n,idx:ukBase?v/ukBase*100:0}; }).sort((a,b)=>b.idx-a.idx);
+  state.charts.rgIdx=new Chart($('regionIndexChart'),{type:'bar',
+    data:{labels:idxRows.map(r=>r.n),datasets:[{data:idxRows.map(r=>r.idx),backgroundColor:idxRows.map(r=>r.idx>=100?'#C8404F':'#C9C4B8')}]},
+    options:{maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' Index: '+c.parsed.x.toFixed(0)+(['eng_rate','cvr','aov','rps'].includes(metric)?' (vs UK rate)':' (per 1k TV households)')}}},
+      scales:{x:{grid:{color:ctx=>ctx.tick.value===100?'#18222E':'#E3E1DA'},ticks:{callback:v=>v}}}}});
+  // full table
+  const cmp=state.cmp?regionAggs(state.cmp):{};
+  const keys=['sessions','users','new_users','engaged','eng_rate','transactions','revenue','cvr','aov'];
+  $('regionTable').innerHTML=`<tr><th class="left">TV region</th>${keys.map(k=>`<th>${METRICS[k].label}</th>`).join('')}<th>Δ Sessions</th><th>Δ Revenue</th></tr>`+
+    TV_REGIONS.map(([n])=>{ const a=cur[n]||{s:0,u:0,nu:0,es:0,t:0,r:0}, p=cmp[n];
+      return `<tr><td class="left"><span class="swatch" style="background:${TV_COLOR[n]}"></span>${n}</td>`+
+        keys.map(k=>`<td class="num">${mFmt(k,mVal(a,k))}</td>`).join('')+
+        `<td>${deltaBadge(a.s,p?p.s:null)}</td><td>${deltaBadge(a.r,p?p.r:null)}</td></tr>`; }).join('');
+}
+$('rgMetric').onchange=renderRegions;
+function exportRegionTable(){ const cur=regionAggs(state.cur);
+  exportCSV('tv_regions.csv',['tv_region','sessions','users','new_users','engaged_sessions','transactions','revenue'],
+    TV_REGIONS.map(([n])=>{const a=cur[n]||{s:0,u:0,nu:0,es:0,t:0,r:0};return [n,a.s,a.u,a.nu,a.es,a.t,a.r.toFixed(2)];})); }
+
+/* ================= CITIES ================= */
+let citySort={key:'r',dir:-1};
+function cityKey(c){return c.rg+'|'+c.city;}
+function renderCities(){
+  if(!state.cur)return;
+  const q=($('citySearch').value||'').toLowerCase();
+  const min=+$('cityMinSess').value||0;
+  const cmpMap={}; if(state.cmp)state.cmp.cities.forEach(c=>cmpMap[cityKey(c)]=c);
+  let rows=state.cur.cities.filter(c=>+c.s>=min && (!q||c.city.toLowerCase().includes(q)||(c.tv||'').toLowerCase().includes(q)));
+  const val=(c,k)=>{ if(k==='city')return c.city; if(k==='tv')return c.tv;
+    const a={s:+c.s,u:+c.u,nu:+c.nu,es:+c.es,t:+c.t,r:+c.r};
+    if(k==='eng_rate')return a.s?a.es/a.s:0; if(k==='cvr')return a.s?a.t/a.s:0; if(k==='aov')return a.t?a.r/a.t:0; return a[k]; };
+  rows.sort((a,b)=>{const x=val(a,citySort.key),y=val(b,citySort.key);
+    return (typeof x==='string'?x.localeCompare(y):x-y)*citySort.dir;});
+  const cols=[['city','City'],['tv','TV region'],['s','Sessions'],['u','Users'],['nu','New users'],['eng_rate','Eng. rate'],['t','Trans.'],['r','Revenue'],['cvr','CVR'],['aov','AOV']];
+  $('cityTable').innerHTML=`<tr>${cols.map(([k,l])=>`<th class="${k==='city'||k==='tv'?'left ':''}sortable" onclick="sortCities('${k}')">${l}${citySort.key===k?(citySort.dir<0?' ▼':' ▲'):''}</th>`).join('')}<th>Δ Sess</th><th>Δ Rev</th></tr>`+
+    rows.slice(0,300).map(c=>{ const p=cmpMap[cityKey(c)];
+      return `<tr><td class="left">${c.city}</td><td class="left"><span class="swatch" style="background:${TV_COLOR[c.tv]||'#B9B4AA'}"></span>${c.tv}</td>
+      <td class="num">${fmtNum(+c.s)}</td><td class="num">${fmtNum(+c.u)}</td><td class="num">${fmtNum(+c.nu)}</td>
+      <td class="num">${fmtPct(+c.s?+c.es/+c.s:0)}</td><td class="num">${fmtNum(+c.t)}</td><td class="num">${fmtGBP(+c.r)}</td>
+      <td class="num">${fmtPct(+c.s?+c.t/+c.s:0)}</td><td class="num">${fmtGBP2(+c.t?+c.r/+c.t:0)}</td>
+      <td>${deltaBadge(+c.s,p?+p.s:null)}</td><td>${deltaBadge(+c.r,p?+p.r:null)}</td></tr>`;}).join('');
+  state._cities=rows;
+  renderMovers(cmpMap);
+}
+function sortCities(k){ citySort=citySort.key===k?{key:k,dir:-citySort.dir}:{key:k,dir:-1}; renderCities(); }
+$('citySearch').oninput=renderCities; $('cityMinSess').onchange=renderCities;
+function exportCities(){ exportCSV('cities.csv',['city','region','tv_region','sessions','users','new_users','engaged_sessions','transactions','revenue'],
+  (state._cities||[]).map(c=>[c.city,c.rg,c.tv,c.s,c.u,c.nu,c.es,c.t,(+c.r).toFixed(2)])); }
+function renderMovers(cmpMap){
+  if(!state.cmp){ $('gainersTable').innerHTML=$('declinersTable').innerHTML='<tr><td class="left" style="color:var(--muted)">Enable a comparison period to see movers.</td></tr>'; return; }
+  const movers=state.cur.cities.filter(c=>+c.s>=200&&cmpMap[cityKey(c)]).map(c=>{
+    const p=cmpMap[cityKey(c)]; return {city:c.city,tv:c.tv,r:+c.r,pr:+p.r,d:+c.r-+p.r,pct:+p.r?(+c.r-+p.r)/+p.r:0};});
+  const tbl=(rows)=>`<tr><th class="left">City</th><th class="left">TV region</th><th>Revenue</th><th>vs cmp</th><th>%</th></tr>`+
+    rows.map(m=>`<tr><td class="left">${m.city}</td><td class="left"><span class="swatch" style="background:${TV_COLOR[m.tv]||'#B9B4AA'}"></span>${m.tv}</td>
+      <td class="num">${fmtGBP(m.r)}</td><td class="num" style="color:${m.d>=0?'#1E7B4F':'#B03A48'}">${m.d>=0?'+':''}${fmtGBP(m.d)}</td>
+      <td class="num">${(m.pct*100).toFixed(1)}%</td></tr>`).join('');
+  $('gainersTable').innerHTML=tbl(movers.filter(m=>m.d>0).sort((a,b)=>b.d-a.d).slice(0,8));
+  $('declinersTable').innerHTML=tbl(movers.filter(m=>m.d<0).sort((a,b)=>a.d-b.d).slice(0,8));
+}
+
+/* ================= MAP ================= */
+let map=null, mapLayer=null, storeLayer=null;
+function renderMap(){
+  if(!state.cur)return;
+  if(!map){
+    map=L.map('map',{scrollWheelZoom:true}).setView([54.3,-2.8],6);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+      {attribution:'&copy; OpenStreetMap &copy; CARTO',maxZoom:18}).addTo(map);
+  }
+  if(mapLayer)map.removeLayer(mapLayer);
+  if(storeLayer){map.removeLayer(storeLayer);storeLayer=null;}
+  const metric=$('mapMetric').value;
+  const pts=state.cur.cities.map(c=>{
+    const co=CITY_COORDS[c.rg+'|'+c.city]; if(!co)return null;
+    const a={s:+c.s,u:+c.u,nu:+c.nu,es:+c.es,t:+c.t,r:+c.r};
+    return {c,co,v:mVal(a,metric)};
+  }).filter(Boolean);
+  const unmapped=state.cur.cities.length-pts.length;
+  $('mapNote').textContent=`${pts.length} cities plotted · ${unmapped} without coordinates (extend CITY_COORDS / tv_region_map to add)`;
+  const maxV=Math.max(...pts.map(p=>p.v),1);
+  mapLayer=L.layerGroup(pts.map(p=>{
+    const rad=4+Math.sqrt(p.v/maxV)*26;
+    const col=TV_COLOR[p.c.tv]||'#B9B4AA';
+    return L.circleMarker(p.co,{radius:rad,color:col,weight:1.5,fillColor:col,fillOpacity:.45})
+      .bindPopup(`<strong>${p.c.city}</strong><br><span style="color:#666">${p.c.tv}</span><br>
+        Sessions: <b>${fmtNum(+p.c.s)}</b><br>Revenue: <b>${fmtGBP(+p.c.r)}</b><br>
+        CVR: <b>${fmtPct(+p.c.s?+p.c.t/+p.c.s:0)}</b><br>AOV: <b>${fmtGBP2(+p.c.t?+p.c.r/+p.c.t:0)}</b>`);
+  })).addTo(map);
+  if($('mapStores').checked){
+    storeLayer=L.layerGroup(STORES.map(s=>L.marker([s.lat,s.lng],{icon:L.divIcon({className:'',html:'<div style="background:#18222E;color:#fff;font:700 10px Inter;padding:2px 6px;border-radius:4px;white-space:nowrap">B&S '+s.name+'</div>',iconAnchor:[10,10]})}))).addTo(map);
+  }
+  $('mapLegend').innerHTML=TV_REGIONS.map(([n])=>`<span class="legitem"><span class="swatch" style="background:${TV_COLOR[n]}"></span>${n}</span>`).join('');
+  setTimeout(()=>map.invalidateSize(),50);
+}
+$('mapMetric').onchange=renderMap; $('mapStores').onchange=renderMap;
+
+/* ================= CHANNEL MIX ================= */
+function weeklyChan(){
+  const chan=state.cur.chan||[]; const reg=$('chRegion').value;
+  const rows=reg==='ALL'?chan.filter(x=>x.tv!=='Non-UK'):chan.filter(x=>x.tv===reg);
+  const wks=[...new Set(rows.map(x=>x.wk))].sort();
+  return {rows,wks};
+}
+function renderChannels(){
+  if(!state.cur)return; destroyChart('chan');
+  const {rows,wks}=weeklyChan(); const meas=$('chMeasure').value, share=$('chShare').checked;
+  const byWk={}; wks.forEach(w=>byWk[w]={});
+  rows.forEach(x=>{ byWk[x.wk][x.c]=(byWk[x.wk][x.c]||0)+ +x[meas]; });
+  const totals=wks.map(w=>Object.values(byWk[w]).reduce((a,b)=>a+b,0)||1);
+  const ds=CHANNELS.map(ch=>({label:ch,backgroundColor:CH_COLOR[ch],
+    data:wks.map((w,i)=>{const v=byWk[w][ch]||0;return share?v/totals[i]*100:v;})}));
+  state.charts.chan=new Chart($('channelChart'),{type:'bar',
+    data:{labels:wks,datasets:ds},
+    options:{maintainAspectRatio:false,
+      plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:10}}},
+        tooltip:{callbacks:{label:c=>` ${c.dataset.label}: ${share?c.parsed.y.toFixed(1)+'%':(meas==='r'?fmtGBP(c.parsed.y):fmtNum(c.parsed.y))}`}},
+        },
+      flightBands:flightBandsFor(wks),
+      scales:{x:{stacked:true,ticks:{maxTicksLimit:16,font:{size:9}}},
+        y:{stacked:true,max:share?100:undefined,ticks:{callback:v=>share?v+'%':v.toLocaleString()}}}}});
+}
+['chRegion','chMeasure','chShare'].forEach(id=>$(id).onchange=renderChannels);
+
+let haloSel=new Set(['London','North East']);
+function buildHaloChips(){
+  $('haloChips').innerHTML=TV_REGIONS.map(([n])=>`<span class="chip ${haloSel.has(n)?'on':''}" style="${haloSel.has(n)?'background:'+TV_COLOR[n]+';border-color:'+TV_COLOR[n]:''}" onclick="toggleHalo('${n.replace(/'/g,"\\'")}')">${n}</span>`).join('');
+}
+function toggleHalo(n){ haloSel.has(n)?haloSel.delete(n):haloSel.add(n); buildHaloChips(); renderHalo(); }
+function renderHalo(){
+  if(!state.cur)return; destroyChart('halo'); buildHaloChips();
+  const chan=(state.cur.chan||[]).filter(x=>(x.c==='Direct'||x.c==='Organic Search')&&haloSel.has(x.tv));
+  const wks=[...new Set((state.cur.chan||[]).map(x=>x.wk))].sort();
+  const ds=[...haloSel].map(n=>{
+    const byWk={}; chan.filter(x=>x.tv===n).forEach(x=>byWk[x.wk]=(byWk[x.wk]||0)+ +x.s);
+    const raw=wks.map(w=>byWk[w]||0);
+    const base=raw.find(v=>v>0)||1;
+    return {label:n,data:raw.map(v=>v/base*100),borderColor:TV_COLOR[n],backgroundColor:TV_COLOR[n],
+      borderWidth:2,pointRadius:0,tension:.3};
+  });
+  state.charts.halo=new Chart($('haloChart'),{type:'line',
+    data:{labels:wks,datasets:ds},
+    options:{maintainAspectRatio:false,
+      plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:10}}},
+        tooltip:{callbacks:{label:c=>` ${c.dataset.label}: ${c.parsed.y.toFixed(0)} (index)`}}},
+      flightBands:flightBandsFor(wks),
+      scales:{x:{ticks:{maxTicksLimit:16,font:{size:9}}},y:{title:{display:true,text:'Index (first week = 100)',font:{size:10}}}}}});
+}
+
+/* ================= CAMPAIGN IMPACT ================= */
+const FLIGHT_KEY='bs_geo_flights';
+function getFlights(){ try{return JSON.parse(localStorage.getItem(FLIGHT_KEY)||'[]');}catch(e){return [];} }
+function saveFlights(f){ localStorage.setItem(FLIGHT_KEY,JSON.stringify(f)); }
+let selFlight=null;
+function renderFlightList(){
+  const fl=getFlights();
+  $('flightList').innerHTML=fl.length?fl.map((f,i)=>`
+    <div class="flightcard ${selFlight===i?'sel':''}" onclick="selectFlight(${i})">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <strong>${f.name}</strong>
+        <button class="ghost" style="padding:2px 8px;font-size:.65rem" onclick="event.stopPropagation();delFlight(${i})">✕</button>
+      </div>
+      <div style="font-size:.72rem;color:var(--muted);margin-top:2px">${f.media} · ${f.start} → ${f.end}</div>
+      <div style="font-size:.72rem;margin-top:2px"><span style="color:#C8404F;font-weight:600">Test:</span> ${f.test.join(', ')}</div>
+      <div style="font-size:.72rem"><span style="color:var(--muted);font-weight:600">Control:</span> ${f.ctrl.join(', ')}</div>
+      ${f.notes?`<div style="font-size:.7rem;color:var(--muted);margin-top:2px">${f.notes}</div>`:''}
+    </div>`).join(''):'<div class="note">No flights yet. Add your TV/media bursts below — dates, aired regions and control regions.</div>';
+}
+function selectFlight(i){ selFlight=i; renderFlightList(); }
+function delFlight(i){ const f=getFlights(); f.splice(i,1); saveFlights(f); if(selFlight===i)selFlight=null; renderFlightList(); renderTrends(); renderChannels(); renderHalo(); }
+function addFlight(){
+  const name=$('fName').value.trim(), start=$('fStart').value, end=$('fEnd').value;
+  const test=[...$('fTest').selectedOptions].map(o=>o.value);
+  const ctrl=[...$('fCtrl').selectedOptions].map(o=>o.value);
+  if(!name||!start||!end||!test.length||!ctrl.length){alert('Need name, dates, at least one test and one control region.');return;}
+  if(test.some(t=>ctrl.includes(t))){alert('A region can\'t be both test and control.');return;}
+  const f=getFlights(); f.push({name,media:$('fMedia').value,start,end,test,ctrl,notes:$('fNotes').value.trim()});
+  saveFlights(f); selFlight=f.length-1;
+  $('fName').value=$('fNotes').value='';
+  renderFlightList(); renderTrends(); renderChannels(); renderHalo();
+}
+function exportFlights(){
+  const blob=new Blob([JSON.stringify(getFlights(),null,2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='bs_campaign_flights.json'; a.click();
+}
+function importFlights(ev){
+  const file=ev.target.files[0]; if(!file)return;
+  const rd=new FileReader();
+  rd.onload=()=>{ try{ const f=JSON.parse(rd.result); if(Array.isArray(f)){saveFlights(f);selFlight=null;renderFlightList();renderTrends();renderChannels();renderHalo();} }catch(e){alert('Invalid JSON');} };
+  rd.readAsText(file); ev.target.value='';
+}
+async function runFlightAnalysis(){
+  const fl=getFlights();
+  if(selFlight===null||!fl[selFlight]){alert('Select a flight first.');return;}
+  const f=fl[selFlight]; const metric=$('flMetric').value; const baseWks=+$('flBaseline').value;
+  const start=new Date(f.start), end=new Date(f.end);
+  const qs=new Date(start); qs.setDate(qs.getDate()-baseWks*7);
+  const qe=new Date(end); qe.setDate(qe.getDate()+14);
+  const iso=d=>d.toISOString().slice(0,10);
+  $('flightStats').innerHTML='<div class="note">Querying BigQuery…</div>';
+  let rows;
+  try{
+    rows=await runQuery(`SELECT FORMAT_DATE('%Y-%m-%d',date) d, tv_region tv, SUM(sessions) s, SUM(users) u, SUM(new_users) nu, SUM(engaged_sessions) es, SUM(transactions) t, ROUND(SUM(revenue),2) r FROM ${T('geo_daily')} WHERE date BETWEEN '${iso(qs)}' AND '${iso(qe)}' AND tv_region IN (${[...f.test,...f.ctrl].map(x=>`'${x.replace(/'/g,"\\'")}'`).join(',')}) GROUP BY 1,2 ORDER BY 1`);
+  }catch(e){ $('flightStats').innerHTML=`<div class="note" style="color:#B03A48">Query failed: ${e.message}</div>`; return; }
+  // daily group sums
+  const days=[...new Set(rows.map(r=>r.d))].sort();
+  const dayVal=(d,group)=>{ const rr=rows.filter(r=>r.d===d&&group.includes(r.tv)); if(!rr.length)return 0; return mVal(sumRows(rr),metric); };
+  const testRaw=days.map(d=>dayVal(d,f.test)), ctrlRaw=days.map(d=>dayVal(d,f.ctrl));
+  // 7-day smoothing
+  const smooth=a=>a.map((_,i)=>{const s=a.slice(Math.max(0,i-6),i+1);return s.reduce((x,y)=>x+y,0)/s.length;});
+  const testS=smooth(testRaw), ctrlS=smooth(ctrlRaw);
+  const inBase=d=>d<f.start, inFlight=d=>d>=f.start&&d<=f.end, inPost=d=>d>f.end;
+  const avg=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:0;
+  const bTest=avg(testS.filter((_,i)=>inBase(days[i])))||1, bCtrl=avg(ctrlS.filter((_,i)=>inBase(days[i])))||1;
+  const testIdx=testS.map(v=>v/bTest*100), ctrlIdx=ctrlS.map(v=>v/bCtrl*100);
+  const flT=avg(testIdx.filter((_,i)=>inFlight(days[i]))), flC=avg(ctrlIdx.filter((_,i)=>inFlight(days[i])));
+  const poT=avg(testIdx.filter((_,i)=>inPost(days[i]))), poC=avg(ctrlIdx.filter((_,i)=>inPost(days[i])));
+  const uplift=flC?flT/flC-1:0, carry=poC?poT/poC-1:0;
+  // estimated incremental raw units during flight: test actual minus counterfactual (baseline * control index)
+  const flightDaysIdx=days.map((d,i)=>inFlight(d)?i:null).filter(x=>x!==null);
+  const incr=flightDaysIdx.reduce((acc,i)=>acc+(testRaw[i]-bTest*(ctrlIdx[i]/100)),0);
+  const m=METRICS[metric];
+  $('flightStats').innerHTML=`
+    <div class="stat"><div class="statlabel">Uplift during flight</div><div class="statval" style="color:${uplift>=0?'#1E7B4F':'#B03A48'}">${uplift>=0?'+':''}${(uplift*100).toFixed(1)}%</div><div class="statsub">test vs control, indexed</div></div>
+    <div class="stat"><div class="statlabel">Post-flight carryover (14d)</div><div class="statval" style="color:${carry>=0?'#1E7B4F':'#B03A48'}">${carry>=0?'+':''}${(carry*100).toFixed(1)}%</div><div class="statsub">residual gap after end</div></div>
+    <div class="stat"><div class="statlabel">Est. incremental ${m.label.toLowerCase()}</div><div class="statval">${m.fmt==='gbp'?fmtGBP(incr):m.fmt==='pct'?'—':fmtNum(Math.round(incr))}</div><div class="statsub">during flight, vs counterfactual</div></div>
+    <div class="stat"><div class="statlabel">Test index (flight avg)</div><div class="statval">${flT.toFixed(0)}</div><div class="statsub">baseline = 100</div></div>
+    <div class="stat"><div class="statlabel">Control index (flight avg)</div><div class="statval">${flC.toFixed(0)}</div><div class="statsub">baseline = 100</div></div>`;
+  destroyChart('flight');
+  state.charts.flight=new Chart($('flightChart'),{type:'line',
+    data:{labels:days,datasets:[
+      {label:'Test ('+f.test.join(', ')+')',data:testIdx,borderColor:'#C8404F',backgroundColor:'#C8404F',borderWidth:2.5,pointRadius:0,tension:.3},
+      {label:'Control ('+f.ctrl.join(', ')+')',data:ctrlIdx,borderColor:'#18222E',backgroundColor:'#18222E',borderWidth:2,borderDash:[5,4],pointRadius:0,tension:.3}]},
+    options:{maintainAspectRatio:false,
+      plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:10}}},
+        tooltip:{callbacks:{label:c=>` ${c.dataset.label}: ${c.parsed.y.toFixed(0)}`}}},
+      flightBands:[{from:f.start,to:f.end,label:f.name,tag:'ON AIR'},...AUTO_EVENTS.map(e=>({from:e.date,to:e.date,label:e.label,tag:'EVENT'}))],
+      scales:{x:{ticks:{maxTicksLimit:14,font:{size:9}}},y:{title:{display:true,text:METRICS[metric].label+' — indexed to own baseline (100)',font:{size:10}}}}}});
+}
+
+/* ================= ASK AI ================= */
+function toggleAI(open){ $('aiDrawer').classList.toggle('open',open); }
+$('aiFab').onclick=()=>toggleAI(!$('aiDrawer').classList.contains('open'));
+function aiContext(){
+  if(!state.cur)return 'No data loaded yet.';
+  const uk=sumRows(ukDaily(state.cur.daily));
+  const league=(state._league||[]).map(r=>`${r.name}: sessions ${r.a.s}, revenue £${r.a.r.toFixed(0)}, CVR ${(r.a.s?r.a.t/r.a.s*100:0).toFixed(2)}%, rev/1kHH £${r.perK.toFixed(2)}, index ${r.idx.toFixed(0)}`).join('\n');
+  const cities=state.cur.cities.slice(0,15).map(c=>`${c.city} (${c.tv}): ${c.s} sessions, £${(+c.r).toFixed(0)}`).join('\n');
+  const flights=getFlights().map(f=>`${f.name} (${f.media}) ${f.start}→${f.end}, test: ${f.test.join('/')}, control: ${f.ctrl.join('/')}`).join('\n')||'none defined';
+  return `Barker & Stonehouse (premium UK furniture retailer) location performance, ${state.range.s} to ${state.range.e}${state.cmpRange?`, compared vs ${state.cmpRange.s} to ${state.cmpRange.e}`:''}.
+UK totals: ${uk.s} sessions, ${uk.u} users, ${uk.t} transactions, £${uk.r.toFixed(0)} revenue, CVR ${(uk.s?uk.t/uk.s*100:0).toFixed(2)}%.
+TV region league (index = revenue per 1k TV households vs UK average = 100):
+${league}
+Top cities:
+${cities}
+Campaign flights defined: ${flights}
+Known events: Spring Promotion Mar 2026; 30 Jun 2026 dining chair delivery moved to flat £15.`;
+}
+async function askAI(){
+  const q=$('aiInput').value.trim(); if(!q)return;
+  let key=localStorage.getItem('anthropic_api_key');
+  if(!key){ key=prompt('Paste your Anthropic API key (stored in this browser only):'); if(!key)return; localStorage.setItem('anthropic_api_key',key.trim()); }
+  $('aiInput').value='';
+  $('aiMsgs').insertAdjacentHTML('beforeend',`<div class="aimsg user">${q.replace(/</g,'&lt;')}</div>`);
+  $('aiMsgs').insertAdjacentHTML('beforeend',`<div class="aimsg bot" id="aiPending">Thinking…</div>`);
+  $('aiMsgs').scrollTop=$('aiMsgs').scrollHeight;
+  try{
+    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':localStorage.getItem('anthropic_api_key'),'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:AI_MODEL,max_tokens:900,
+        system:'You are a media/analytics assistant for Barker & Stonehouse. Answer concisely and practically for a UK TV/media buying context. Use the data provided. Flag caveats briefly where relevant.',
+        messages:[{role:'user',content:aiContext()+'\n\nQuestion: '+q}]})});
+    const data=await res.json();
+    const txt=(data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('\n')||('Error: '+(data.error?.message||'no response'));
+    $('aiPending').outerHTML=`<div class="aimsg bot">${txt.replace(/</g,'&lt;').replace(/\n/g,'<br>')}</div>`;
+  }catch(e){ $('aiPending').outerHTML=`<div class="aimsg bot">Request failed: ${e.message}</div>`; }
+  $('aiMsgs').scrollTop=$('aiMsgs').scrollHeight;
+}
+
+renderFlightList();
+buildHaloChips();
+</script>
+</body>
+</html>
