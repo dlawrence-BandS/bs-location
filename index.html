@@ -332,38 +332,48 @@ th.sortable:hover{color:var(--onair)}
 
 <!-- ============ CAMPAIGN IMPACT ============ -->
 <div class="tab" id="tab-flights">
+  <div class="panel">
+    <h3>Campaign scoreboard</h3>
+    <div class="sub">Every media flight from your Bonded plans, analysed automatically — test regions vs control regions, each indexed to their own pre-flight baseline. Click a row for the detail chart. This is a directional geo-read, not econometrics.</div>
+    <div class="ctlrow">
+      <label>Metric</label><select id="flMetric"></select>
+      <label>Baseline</label>
+      <select id="flBaseline"><option value="2">2 weeks pre</option><option value="4" selected>4 weeks pre</option><option value="6">6 weeks pre</option><option value="8">8 weeks pre</option></select>
+      <button class="action red" onclick="analyseAllFlights(true)">Analyse all flights</button>
+    </div>
+    <div style="overflow-x:auto"><table id="flightBoard"><tr><td class="left" style="color:var(--muted);font-size:.78rem;padding:10px">Sign in and hit "Analyse all flights" — or just open this tab after loading data and it runs itself.</td></tr></table></div>
+  </div>
   <div class="grid2" style="grid-template-columns:380px 1fr">
     <div class="panel">
-      <h3>Campaign flights</h3>
-      <div class="sub">Stored in this browser (localStorage). Export the JSON to share flight definitions with the agency.</div>
+      <h3>Flights</h3>
+      <div class="sub">Media windows from the Bonded plans are built in (marked PLAN). Add your own for anything else — one-off bursts, sponsorships, tests.</div>
       <div id="flightList"></div>
-      <h3 style="margin-top:16px">Add flight</h3>
-      <div class="formgrid">
-        <input id="fName" placeholder="Name (e.g. ITV Q1 Burst)">
-        <select id="fMedia"><option>TV</option><option>BVOD</option><option>TV + BVOD</option><option>Radio</option><option>Outdoor</option><option>Other</option></select>
-        <input type="date" id="fStart"><input type="date" id="fEnd">
-      </div>
-      <div class="formgrid" style="grid-template-columns:1fr 1fr">
-        <div><label style="font-size:.7rem;color:var(--muted);font-weight:600">Test regions (aired)</label><select id="fTest" multiple size="6"></select></div>
-        <div><label style="font-size:.7rem;color:var(--muted);font-weight:600">Control regions</label><select id="fCtrl" multiple size="6"></select></div>
-      </div>
-      <input id="fNotes" placeholder="Notes (budget, spots, agency…)" style="width:100%;border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-size:.8rem;margin-bottom:8px">
-      <button class="action red" onclick="addFlight()">Add flight</button>
-      <button class="ghost" onclick="exportFlights()">Export JSON</button>
-      <button class="ghost" onclick="document.getElementById('flightImport').click()">Import JSON</button>
-      <input type="file" id="flightImport" accept=".json" style="display:none" onchange="importFlights(event)">
+      <details style="margin-top:14px">
+        <summary style="cursor:pointer;font-weight:700;font-size:.85rem">+ Add custom flight</summary>
+        <div style="margin-top:10px">
+        <div class="formgrid">
+          <input id="fName" placeholder="Name (e.g. ITV Q1 Burst)">
+          <select id="fMedia"><option>TV</option><option>BVOD</option><option>TV + BVOD</option><option>Radio</option><option>Outdoor</option><option>Other</option></select>
+          <input type="date" id="fStart"><input type="date" id="fEnd">
+        </div>
+        <div class="formgrid" style="grid-template-columns:1fr 1fr">
+          <div><label style="font-size:.7rem;color:var(--muted);font-weight:600">Test regions (aired)</label><select id="fTest" multiple size="6"></select></div>
+          <div><label style="font-size:.7rem;color:var(--muted);font-weight:600">Control regions</label><select id="fCtrl" multiple size="6"></select></div>
+        </div>
+        <input id="fNotes" placeholder="Notes (budget, spots, agency…)" style="width:100%;border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-size:.8rem;margin-bottom:8px">
+        <button class="action red" onclick="addFlight()">Add flight</button>
+        <button class="ghost" onclick="exportFlights()">Export JSON</button>
+        <button class="ghost" onclick="document.getElementById('flightImport').click()">Import JSON</button>
+        <input type="file" id="flightImport" accept=".json" style="display:none" onchange="importFlights(event)">
+        </div>
+      </details>
     </div>
     <div class="panel">
-      <h3>Uplift analysis</h3>
-      <div class="ctlrow">
-        <label>Metric</label><select id="flMetric"></select>
-        <label>Baseline</label>
-        <select id="flBaseline"><option value="2">2 weeks pre</option><option value="4" selected>4 weeks pre</option><option value="6">6 weeks pre</option><option value="8">8 weeks pre</option></select>
-        <button class="action" onclick="runFlightAnalysis()">Run analysis</button>
-      </div>
+      <h3 id="flightDetailTitle">Flight detail</h3>
       <div id="flightStats" class="statrow"></div>
+      <div id="flightVerdict" class="note" style="display:none"></div>
       <div class="chartbox tall"><canvas id="flightChart"></canvas></div>
-      <div class="note" id="flightNote">Select a flight on the left, then Run analysis. Test and control regions are each indexed to their own pre-flight baseline average (100). If the test line separates from control during and after the flight, the campaign moved the needle. This is a directional geo-read, not a full econometric model — weather, promos and distribution differences between regions aren't controlled for. The 30 Jun 2026 delivery change and Spring Promotion are marked automatically.</div>
+      <div class="note" id="flightNote">Click a flight in the scoreboard or the list — the analysis runs automatically. Test and control regions are each indexed to their own pre-flight baseline average (100). If the test line separates from control during and after the flight, the campaign moved the needle. Weather, promos and distribution differences between regions aren't controlled for; promo windows and the 30 Jun 2026 delivery change are marked on the chart.</div>
     </div>
   </div>
 </div>
@@ -608,6 +618,7 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
   b.classList.add('active'); $('tab-'+b.dataset.tab).classList.add('active');
   if(b.dataset.tab==='map'&&state.cur)setTimeout(renderMap,50);
+  if(b.dataset.tab==='flights'&&accessToken&&!state._flightBoard)analyseAllFlights();
 });
 
 /* ================= FLIGHT BANDS PLUGIN (signature: ON AIR strips) ================= */
@@ -646,7 +657,7 @@ function flightBandsFor(labels,opts){
   const o=Object.assign({flights:true,promos:true},opts||{});
   const bands=[];
   if(o.promos)promoBands().forEach(b=>{ if(b.to>=labels[0]&&b.from<=labels[labels.length-1])bands.push(b); });
-  if(o.flights)getFlights().forEach(f=>bands.push({from:f.start,to:f.end,label:f.name,tag:'ON AIR'}));
+  if(o.flights)allFlights().forEach(f=>bands.push({from:f.start,to:f.end,label:f.name,tag:'ON AIR'}));
   AUTO_EVENTS.forEach(ev=>{ if(ev.date>=labels[0]&&ev.date<=labels[labels.length-1])
     bands.push({from:ev.date,to:ev.date,label:ev.label,tag:'EVENT',color:'rgba(24,34,46,.06)',solid:'rgba(24,34,46,.5)'}); });
   return bands;
@@ -950,35 +961,68 @@ function renderHalo(){
 
 /* ================= CAMPAIGN IMPACT ================= */
 const FLIGHT_KEY='bs_geo_flights';
+/* Media flights derived from the Bonded plans. 2025 = regional (test = linear ITV heartland NE+Yorkshire;
+   control = comparable regions with no linear activity). 2026 = addressable all-store (test = store catchment
+   regions; same control). Nottingham/Brighton/London had lighter 2025 CTV/radio so sit in neither group for 2025. */
+const CTRL_2025=['North West','East','West & South West'];
+const AUTO_FLIGHTS=[
+ {name:'Spring 2025 media (regional)',media:'TV + BVOD + Radio',start:'2025-03-20',end:'2025-05-26',
+  test:['North East','Yorkshire'],ctrl:CTRL_2025,auto:true,
+  notes:'£300k Bonded plan. Linear ITV Yorks/TT ~275 TVRs + regional CTV, radio, 725k door drop.'},
+ {name:'Summer 2025 media (regional)',media:'TV + BVOD + Radio',start:'2025-06-19',end:'2025-08-25',
+  test:['North East','Yorkshire'],ctrl:CTRL_2025,auto:true,
+  notes:'£300k Bonded plan. Same regional model as Spring 25, ~230 TVRs.'},
+ {name:'Autumn 2025 media (regional)',media:'TV + BVOD + Radio',start:'2025-09-08',end:'2025-11-23',
+  test:['North East','Yorkshire'],ctrl:CTRL_2025,auto:true,
+  notes:'£322k Bonded plan. Regional model, ~174 TVRs. Window approx — plan grid starts w/c 8 Sep.'},
+ {name:'Winter 25/26 media (regional)',media:'TV + BVOD + Radio + Print',start:'2025-12-19',end:'2026-02-28',
+  test:['North East','Yorkshire'],ctrl:CTRL_2025,auto:true,
+  notes:'£294k Bonded plan. 10-second-only linear ~367 TVRs + Sunday Times Mag.'},
+ {name:'Spring 2026 media (addressable)',media:'Addressable TV/CTV',start:'2026-03-26',end:'2026-05-24',
+  test:['North East','Yorkshire','Midlands','London','South & South East'],ctrl:CTRL_2025,auto:true,
+  notes:'£290k Bonded plan. STRATEGY CHANGE: no linear/radio — Adsmart, Sabio, ITVX, Skyrise, Converge across all store catchments.'},
+ {name:'Summer 2026 media (addressable)',media:'Addressable TV/CTV',start:'2026-06-17',end:'2026-08-30',
+  test:['North East','Yorkshire','Midlands','London','South & South East'],ctrl:CTRL_2025,auto:true,
+  notes:'£250k Bonded plan (down from £300k LY). Addressable model, upweights at launch / Extra 10% / end BH.'},
+];
 function getFlights(){ try{return JSON.parse(localStorage.getItem(FLIGHT_KEY)||'[]');}catch(e){return [];} }
 function saveFlights(f){ localStorage.setItem(FLIGHT_KEY,JSON.stringify(f)); }
+function allFlights(){ return [...AUTO_FLIGHTS,...getFlights()]; }
 let selFlight=null;
 function renderFlightList(){
-  const fl=getFlights();
-  $('flightList').innerHTML=fl.length?fl.map((f,i)=>`
+  const fl=allFlights();
+  $('flightList').innerHTML=fl.map((f,i)=>`
     <div class="flightcard ${selFlight===i?'sel':''}" onclick="selectFlight(${i})">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <strong>${f.name}</strong>
-        <button class="ghost" style="padding:2px 8px;font-size:.65rem" onclick="event.stopPropagation();delFlight(${i})">✕</button>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
+        <strong style="font-size:.82rem">${f.name}</strong>
+        ${f.auto?'<span style="font-size:.6rem;font-weight:700;letter-spacing:.06em;background:rgba(224,142,43,.15);color:#8F6318;border-radius:4px;padding:2px 6px">PLAN</span>'
+          :`<button class="ghost" style="padding:2px 8px;font-size:.65rem" onclick="event.stopPropagation();delFlight(${i})">✕</button>`}
       </div>
       <div style="font-size:.72rem;color:var(--muted);margin-top:2px">${f.media} · ${f.start} → ${f.end}</div>
       <div style="font-size:.72rem;margin-top:2px"><span style="color:#C8404F;font-weight:600">Test:</span> ${f.test.join(', ')}</div>
       <div style="font-size:.72rem"><span style="color:var(--muted);font-weight:600">Control:</span> ${f.ctrl.join(', ')}</div>
       ${f.notes?`<div style="font-size:.7rem;color:var(--muted);margin-top:2px">${f.notes}</div>`:''}
-    </div>`).join(''):'<div class="note">No flights yet. Add your TV/media bursts below — dates, aired regions and control regions.</div>';
+    </div>`).join('');
 }
-function selectFlight(i){ selFlight=i; renderFlightList(); }
-function delFlight(i){ const f=getFlights(); f.splice(i,1); saveFlights(f); if(selFlight===i)selFlight=null; renderFlightList(); renderTrends(); renderChannels(); renderHalo(); }
+function selectFlight(i){ selFlight=i; renderFlightList(); runFlightAnalysis(); }
+function delFlight(i){
+  const ui=i-AUTO_FLIGHTS.length; if(ui<0)return;
+  const f=getFlights(); f.splice(ui,1); saveFlights(f);
+  if(selFlight===i)selFlight=null;
+  state._flightBoard=null;
+  renderFlightList(); renderTrends(); renderChannels(); renderHalo();
+}
 function addFlight(){
   const name=$('fName').value.trim(), start=$('fStart').value, end=$('fEnd').value;
   const test=[...$('fTest').selectedOptions].map(o=>o.value);
   const ctrl=[...$('fCtrl').selectedOptions].map(o=>o.value);
   if(!name||!start||!end||!test.length||!ctrl.length){alert('Need name, dates, at least one test and one control region.');return;}
-  if(test.some(t=>ctrl.includes(t))){alert('A region can\'t be both test and control.');return;}
+  if(test.some(t=>ctrl.includes(t))){alert("A region can't be both test and control.");return;}
   const f=getFlights(); f.push({name,media:$('fMedia').value,start,end,test,ctrl,notes:$('fNotes').value.trim()});
-  saveFlights(f); selFlight=f.length-1;
+  saveFlights(f); selFlight=AUTO_FLIGHTS.length+f.length-1;
   $('fName').value=$('fNotes').value='';
-  renderFlightList(); renderTrends(); renderChannels(); renderHalo();
+  state._flightBoard=null;
+  renderFlightList(); renderTrends(); renderChannels(); renderHalo(); runFlightAnalysis();
 }
 function exportFlights(){
   const blob=new Blob([JSON.stringify(getFlights(),null,2)],{type:'application/json'});
@@ -987,27 +1031,21 @@ function exportFlights(){
 function importFlights(ev){
   const file=ev.target.files[0]; if(!file)return;
   const rd=new FileReader();
-  rd.onload=()=>{ try{ const f=JSON.parse(rd.result); if(Array.isArray(f)){saveFlights(f);selFlight=null;renderFlightList();renderTrends();renderChannels();renderHalo();} }catch(e){alert('Invalid JSON');} };
+  rd.onload=()=>{ try{ const f=JSON.parse(rd.result); if(Array.isArray(f)){saveFlights(f);selFlight=null;state._flightBoard=null;renderFlightList();renderTrends();renderChannels();renderHalo();} }catch(e){alert('Invalid JSON');} };
   rd.readAsText(file); ev.target.value='';
 }
-async function runFlightAnalysis(){
-  const fl=getFlights();
-  if(selFlight===null||!fl[selFlight]){alert('Select a flight first.');return;}
-  const f=fl[selFlight]; const metric=$('flMetric').value; const baseWks=+$('flBaseline').value;
-  const start=new Date(f.start), end=new Date(f.end);
-  const qs=new Date(start); qs.setDate(qs.getDate()-baseWks*7);
-  const qe=new Date(end); qe.setDate(qe.getDate()+14);
+
+async function fetchFlightRows(f,baseWks){
+  const yday=new Date(Date.now()-864e5);
+  const qs=new Date(f.start); qs.setDate(qs.getDate()-baseWks*7);
+  let qe=new Date(f.end); qe.setDate(qe.getDate()+14); if(qe>yday)qe=yday;
   const iso=d=>d.toISOString().slice(0,10);
-  $('flightStats').innerHTML='<div class="note">Querying BigQuery…</div>';
-  let rows;
-  try{
-    rows=await runQuery(`SELECT FORMAT_DATE('%Y-%m-%d',date) d, tv_region tv, SUM(sessions) s, SUM(users) u, SUM(new_users) nu, SUM(engaged_sessions) es, SUM(transactions) t, ROUND(SUM(revenue),2) r FROM ${T('geo_daily')} WHERE date BETWEEN '${iso(qs)}' AND '${iso(qe)}' AND tv_region IN (${[...f.test,...f.ctrl].map(x=>`'${x.replace(/'/g,"\\'")}'`).join(',')}) GROUP BY 1,2 ORDER BY 1`);
-  }catch(e){ $('flightStats').innerHTML=`<div class="note" style="color:#B03A48">Query failed: ${e.message}</div>`; return; }
-  // daily group sums
+  return runQuery(`SELECT FORMAT_DATE('%Y-%m-%d',date) d, tv_region tv, SUM(sessions) s, SUM(users) u, SUM(new_users) nu, SUM(engaged_sessions) es, SUM(transactions) t, ROUND(SUM(revenue),2) r FROM ${T('geo_daily')} WHERE date BETWEEN '${iso(qs)}' AND '${iso(qe)}' AND tv_region IN (${[...f.test,...f.ctrl].map(x=>`'${x.replace(/'/g,"\\'")}'`).join(',')}) GROUP BY 1,2 ORDER BY 1`);
+}
+function computeFlightStats(f,rows,metric){
   const days=[...new Set(rows.map(r=>r.d))].sort();
   const dayVal=(d,group)=>{ const rr=rows.filter(r=>r.d===d&&group.includes(r.tv)); if(!rr.length)return 0; return mVal(sumRows(rr),metric); };
   const testRaw=days.map(d=>dayVal(d,f.test)), ctrlRaw=days.map(d=>dayVal(d,f.ctrl));
-  // 7-day smoothing
   const smooth=a=>a.map((_,i)=>{const s=a.slice(Math.max(0,i-6),i+1);return s.reduce((x,y)=>x+y,0)/s.length;});
   const testS=smooth(testRaw), ctrlS=smooth(ctrlRaw);
   const inBase=d=>d<f.start, inFlight=d=>d>=f.start&&d<=f.end, inPost=d=>d>f.end;
@@ -1016,28 +1054,100 @@ async function runFlightAnalysis(){
   const testIdx=testS.map(v=>v/bTest*100), ctrlIdx=ctrlS.map(v=>v/bCtrl*100);
   const flT=avg(testIdx.filter((_,i)=>inFlight(days[i]))), flC=avg(ctrlIdx.filter((_,i)=>inFlight(days[i])));
   const poT=avg(testIdx.filter((_,i)=>inPost(days[i]))), poC=avg(ctrlIdx.filter((_,i)=>inPost(days[i])));
-  const uplift=flC?flT/flC-1:0, carry=poC?poT/poC-1:0;
-  // estimated incremental raw units during flight: test actual minus counterfactual (baseline * control index)
+  const uplift=flC?flT/flC-1:0;
+  const postDays=days.filter(inPost).length;
+  const carry=postDays?(poC?poT/poC-1:0):null;
   const flightDaysIdx=days.map((d,i)=>inFlight(d)?i:null).filter(x=>x!==null);
   const incr=flightDaysIdx.reduce((acc,i)=>acc+(testRaw[i]-bTest*(ctrlIdx[i]/100)),0);
+  return {days,testRaw,ctrlRaw,testIdx,ctrlIdx,uplift,carry,incr,flT,flC,
+    baseDays:days.filter(inBase).length,flightDays:flightDaysIdx.length,postDays};
+}
+function flightVerdict(st,f){
+  const yday=new Date(Date.now()-864e5).toISOString().slice(0,10);
+  const live=f.end>=yday;
+  let v,c;
+  if(st.uplift>=0.03){v='WORKED';c='#1E7B4F';}
+  else if(st.uplift<=-0.03){v='DRAG';c='#B03A48';}
+  else {v='FLAT';c='#5E6B78';}
+  const low=st.baseDays<14||st.flightDays<7;
+  return {v,c,live,low};
+}
+function verdictBadge(vd){
+  return `<span style="font-size:.62rem;font-weight:700;letter-spacing:.05em;color:#fff;background:${vd.c};border-radius:4px;padding:2px 7px">${vd.v}</span>`+
+    (vd.live?' <span style="font-size:.62rem;font-weight:700;color:#C8404F">LIVE</span>':'')+
+    (vd.low?' <span style="font-size:.62rem;color:#8F6318" title="Short baseline or flight — treat with caution">low conf.</span>':'');
+}
+async function analyseAllFlights(force){
+  if(!accessToken){ $('flightBoard').innerHTML='<tr><td class="left" style="color:var(--muted);font-size:.78rem;padding:10px">Sign in first, then Analyse all flights.</td></tr>'; return; }
+  if(state._flightBoard&&!force){ renderFlightBoard(); return; }
+  const metric=$('flMetric').value, baseWks=+$('flBaseline').value;
+  const yday=new Date(Date.now()-864e5).toISOString().slice(0,10);
+  const fl=allFlights().map((f,i)=>({f,i})).filter(x=>x.f.start<=yday);
+  $('flightBoard').innerHTML='<tr><td class="left" style="color:var(--muted);font-size:.78rem;padding:10px">Analysing '+fl.length+' flights…</td></tr>';
+  const results=[];
+  for(const {f,i} of fl){
+    try{ const rows=await fetchFlightRows(f,baseWks);
+      const st=computeFlightStats(f,rows,metric);
+      results.push({f,i,st,vd:flightVerdict(st,f)});
+    }catch(e){ results.push({f,i,err:e.message}); }
+  }
+  state._flightBoard={results,metric};
+  renderFlightBoard();
+}
+function renderFlightBoard(){
+  if(!state._flightBoard)return;
+  const {results,metric}=state._flightBoard;
   const m=METRICS[metric];
+  const fmtIncr=v=>m.fmt==='gbp'?fmtGBP(v):m.fmt==='pct'?'—':fmtNum(Math.round(v));
+  $('flightBoard').innerHTML=`<tr><th class="left">Flight</th><th class="left">Window</th><th class="left">Test vs control</th><th>Uplift in flight</th><th>Carryover (14d)</th><th>Est. incremental ${m.label.toLowerCase()}</th><th class="left">Verdict</th></tr>`+
+    results.map(r=>{
+      if(r.err)return `<tr><td class="left">${r.f.name}</td><td class="left">${r.f.start} → ${r.f.end}</td><td class="left" colspan="5" style="color:#B03A48;font-size:.75rem">Failed: ${r.err}</td></tr>`;
+      const u=r.st.uplift, ca=r.st.carry;
+      return `<tr style="cursor:pointer${selFlight===r.i?';background:rgba(200,64,79,.05)':''}" onclick="selectFlight(${r.i})">
+        <td class="left"><strong style="font-size:.8rem">${r.f.name}</strong></td>
+        <td class="left" style="font-size:.75rem;color:var(--muted)">${r.f.start} → ${r.f.end}</td>
+        <td class="left" style="font-size:.72rem">${r.f.test.length} vs ${r.f.ctrl.length} regions</td>
+        <td class="num" style="font-weight:700;color:${u>=0?'#1E7B4F':'#B03A48'}">${u>=0?'+':''}${(u*100).toFixed(1)}%</td>
+        <td class="num" style="color:${ca===null?'var(--muted)':ca>=0?'#1E7B4F':'#B03A48'}">${ca===null?'—':(ca>=0?'+':'')+(ca*100).toFixed(1)+'%'}</td>
+        <td class="num">${fmtIncr(r.st.incr)}</td>
+        <td class="left">${verdictBadge(r.vd)}</td></tr>`;
+    }).join('');
+}
+async function runFlightAnalysis(){
+  const fl=allFlights();
+  if(selFlight===null||!fl[selFlight]){return;}
+  const f=fl[selFlight]; const metric=$('flMetric').value; const baseWks=+$('flBaseline').value;
+  $('flightDetailTitle').textContent='Flight detail — '+f.name;
+  $('flightStats').innerHTML='<div class="note">Querying BigQuery…</div>';
+  $('flightVerdict').style.display='none';
+  let rows;
+  try{ rows=await fetchFlightRows(f,baseWks); }
+  catch(e){ $('flightStats').innerHTML=`<div class="note" style="color:#B03A48">Query failed: ${e.message}</div>`; return; }
+  const st=computeFlightStats(f,rows,metric);
+  const vd=flightVerdict(st,f);
+  const m=METRICS[metric];
+  const uplift=st.uplift, carry=st.carry, incr=st.incr;
   $('flightStats').innerHTML=`
     <div class="stat"><div class="statlabel">Uplift during flight</div><div class="statval" style="color:${uplift>=0?'#1E7B4F':'#B03A48'}">${uplift>=0?'+':''}${(uplift*100).toFixed(1)}%</div><div class="statsub">test vs control, indexed</div></div>
-    <div class="stat"><div class="statlabel">Post-flight carryover (14d)</div><div class="statval" style="color:${carry>=0?'#1E7B4F':'#B03A48'}">${carry>=0?'+':''}${(carry*100).toFixed(1)}%</div><div class="statsub">residual gap after end</div></div>
+    <div class="stat"><div class="statlabel">Post-flight carryover (14d)</div><div class="statval" style="color:${carry===null?'var(--muted)':carry>=0?'#1E7B4F':'#B03A48'}">${carry===null?'—':(carry>=0?'+':'')+(carry*100).toFixed(1)+'%'}</div><div class="statsub">${carry===null?'flight still live / too recent':'residual gap after end'}</div></div>
     <div class="stat"><div class="statlabel">Est. incremental ${m.label.toLowerCase()}</div><div class="statval">${m.fmt==='gbp'?fmtGBP(incr):m.fmt==='pct'?'—':fmtNum(Math.round(incr))}</div><div class="statsub">during flight, vs counterfactual</div></div>
-    <div class="stat"><div class="statlabel">Test index (flight avg)</div><div class="statval">${flT.toFixed(0)}</div><div class="statsub">baseline = 100</div></div>
-    <div class="stat"><div class="statlabel">Control index (flight avg)</div><div class="statval">${flC.toFixed(0)}</div><div class="statsub">baseline = 100</div></div>`;
+    <div class="stat"><div class="statlabel">Test index (flight avg)</div><div class="statval">${st.flT.toFixed(0)}</div><div class="statsub">baseline = 100</div></div>
+    <div class="stat"><div class="statlabel">Control index (flight avg)</div><div class="statval">${st.flC.toFixed(0)}</div><div class="statsub">baseline = 100</div></div>`;
+  const vEl=$('flightVerdict'); vEl.style.display='block';
+  const dir=uplift>=0.03?'outperformed':uplift<=-0.03?'underperformed':'tracked in line with';
+  vEl.innerHTML=`${verdictBadge(vd)} <strong>${f.name}:</strong> test regions (${f.test.join(', ')}) ${dir} control by <strong>${(uplift*100).toFixed(1)}%</strong> on ${m.label.toLowerCase()} during the flight${carry!==null?`, and ${carry>=0.03?'held a':'showed '+(carry<=-0.03?'no':'a modest')} <strong>${(carry*100).toFixed(1)}%</strong> gap in the 14 days after`:''}. Estimated <strong>${m.fmt==='gbp'?fmtGBP(incr):fmtNum(Math.round(incr))}</strong> incremental ${m.label.toLowerCase()} vs the control-based counterfactual.${vd.low?' <em>Short baseline or flight window — treat as indicative.</em>':''}${vd.live?' Flight is still live — figures are to-date.':''}`;
   destroyChart('flight');
   state.charts.flight=new Chart($('flightChart'),{type:'line',
-    data:{labels:days,datasets:[
-      {label:'Test ('+f.test.join(', ')+')',data:testIdx,borderColor:'#C8404F',backgroundColor:'#C8404F',borderWidth:2.5,pointRadius:0,tension:.3},
-      {label:'Control ('+f.ctrl.join(', ')+')',data:ctrlIdx,borderColor:'#18222E',backgroundColor:'#18222E',borderWidth:2,borderDash:[5,4],pointRadius:0,tension:.3}]},
+    data:{labels:st.days,datasets:[
+      {label:'Test ('+f.test.join(', ')+')',data:st.testIdx,borderColor:'#C8404F',backgroundColor:'#C8404F',borderWidth:2.5,pointRadius:0,tension:.3},
+      {label:'Control ('+f.ctrl.join(', ')+')',data:st.ctrlIdx,borderColor:'#18222E',backgroundColor:'#18222E',borderWidth:2,borderDash:[5,4],pointRadius:0,tension:.3}]},
     options:{maintainAspectRatio:false,
       plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:10}}},
         tooltip:{callbacks:{label:c=>` ${c.dataset.label}: ${c.parsed.y.toFixed(0)}`}}},
-      flightBands:[{from:f.start,to:f.end,label:f.name,tag:'ON AIR'},...AUTO_EVENTS.map(e=>({from:e.date,to:e.date,label:e.label,tag:'EVENT'}))],
+      flightBands:[{from:f.start,to:f.end,label:f.name,tag:'ON AIR'},...promoBands().filter(b=>b.to>=st.days[0]&&b.from<=st.days[st.days.length-1]),...AUTO_EVENTS.filter(e=>e.date>=st.days[0]&&e.date<=st.days[st.days.length-1]).map(e=>({from:e.date,to:e.date,label:e.label,tag:'EVENT',color:'rgba(24,34,46,.06)',solid:'rgba(24,34,46,.5)'}))],
       scales:{x:{ticks:{maxTicksLimit:14,font:{size:9}}},y:{title:{display:true,text:METRICS[metric].label+' — indexed to own baseline (100)',font:{size:10}}}}}});
 }
+['flMetric','flBaseline'].forEach(id=>$(id).onchange=()=>{ state._flightBoard=null; analyseAllFlights(true); if(selFlight!==null)runFlightAnalysis(); });
 
 /* ================= PROMOTIONS (YoY campaign comparison) ================= */
 function fillPromoSelects(){
@@ -1085,7 +1195,6 @@ function renderPromo(){
   const N=Math.min(lenA,lenB);
   const plannedB=dayCount(B.start,B.end);
   const inflight=lenB<plannedB;
-  // KPIs over like-for-like first N days
   const sumN=(agg)=>{ const t={s:0,u:0,nu:0,es:0,t:0,r:0}; agg.slice(0,N).forEach(a=>{for(const k in t)t[k]+=a[k];}); return t; };
   const kA=sumN(aggA), kB=sumN(aggB);
   const kpi=(label,va,vb,fmt)=>`<div class="stat"><div class="statlabel">${label}</div><div class="statval">${fmt(vb)}</div><div class="statsub">${p.label} ${A.tag}: ${fmt(va)} ${deltaBadge(vb,va)}</div></div>`;
@@ -1099,19 +1208,17 @@ function renderPromo(){
     kpi('Transactions',kA.t,kB.t,fmtNum)+
     kpi('CVR',kA.s?kA.t/kA.s:0,kB.s?kB.t/kB.s:0,fmtPct)+
     kpi('AOV',kA.t?kA.r/kA.t:0,kB.t?kB.r/kB.t:0,fmtGBP2);
-  // media plan context cards
   const planCard=(run)=>{ const pl=planFor(p.key,run.tag);
     if(!pl)return `<div class="stat"><div class="statlabel">${p.label} ${run.tag} — media plan</div><div class="statsub" style="margin-top:4px">No Bonded plan on file for this run.</div></div>`;
     return `<div class="stat"><div class="statlabel">${p.label} ${run.tag} — ${pl.type} · ${pl.budget}</div>
       <div class="statsub" style="margin:4px 0 6px">${pl.window} · Focus: ${pl.focus.join(', ')}</div>
       <div style="font-size:.74rem;line-height:1.45">${pl.strategy}</div>
-      <div class="statsub" style="margin-top:6px">${pl.mix.map(m=>m[0]+' '+m[1]).join(' · ')}</div></div>`; };
+      <div class="statsub" style="margin-top:6px">${pl.mix.map(m2=>m2[0]+' '+m2[1]).join(' · ')}</div></div>`; };
   $('prPlans').innerHTML=planCard(A)+planCard(B);
   $('prNote').textContent=`Like-for-like: first ${N} days of each run.`+
     (inflight?` ${p.label} ${B.tag} is in flight — day ${lenB} of ${plannedB}.`:'')+
     ` ${p.label} ${A.tag}: ${A.start} → ${A.end} (${lenA}d in data). ${p.label} ${B.tag}: ${B.start} → ${B.end}.`+
     (A.tbc||B.tbc?' TBC dates are the current plan and may change.':'');
-  // day-aligned chart
   const cum=$('prCum').checked, smooth=$('prSmooth').checked&&!cum;
   const seriesOf=(agg)=>{
     if(cum){ const run={s:0,u:0,nu:0,es:0,t:0,r:0};
@@ -1133,7 +1240,6 @@ function renderPromo(){
       scales:{x:{ticks:{maxTicksLimit:16,font:{size:9}}},
         y:{title:{display:true,text:m.label+(cum?' (cumulative)':smooth?' (7-day avg)':''),font:{size:10}},
           ticks:{callback:v=>m.fmt==='gbp'?fmtGBP(v):m.fmt==='pct'?fmtPct(v):v.toLocaleString()}}}}});
-  // region table over like-for-like window
   const cutA=new Date(A.start), cutB=new Date(B.start);
   cutA.setDate(cutA.getDate()+N-1); cutB.setDate(cutB.getDate()+N-1);
   const isoA=cutA.toISOString().slice(0,10), isoB=cutB.toISOString().slice(0,10);
@@ -1156,7 +1262,6 @@ function renderPromo(){
 function renderPromoChannels(N){
   if(!state._promo)return;
   const {p,A,B,ca,cb}=state._promo;
-  // fill source select once per compare (keep selection if possible)
   const sel=$('prChan'); const keep=sel.value;
   sel.innerHTML='<option value="HALO">TV halo (Direct + Organic Search)</option>'+CHANNELS.map(c=>`<option value="${c}">${c}</option>`).join('');
   if([...sel.options].some(o=>o.value===keep))sel.value=keep;
@@ -1185,7 +1290,6 @@ function renderPromoChannels(N){
       scales:{x:{ticks:{maxTicksLimit:16,font:{size:9}}},
         y:{title:{display:true,text:(meas==='r'?'Revenue':'Sessions')+(cum?' (cumulative)':smooth?' (7-day avg)':''),font:{size:10}},
           ticks:{callback:v=>meas==='r'?fmtGBP(v):v.toLocaleString()}}}}});
-  // channel mix table, like-for-like first N days
   const chanAgg=(rows,run)=>{ const cut=new Date(run.start); cut.setDate(cut.getDate()+N-1); const iso=cut.toISOString().slice(0,10);
     const o={}; rows.filter(x=>x.d<=iso).forEach(x=>{ const a=o[x.c]||(o[x.c]={s:0,r:0}); a.s+=+x.s; a.r+=+x.r; }); return o; };
   const gA=chanAgg(ca,A), gB=chanAgg(cb,B);
@@ -1225,7 +1329,10 @@ function aiContext(){
   const uk=sumRows(ukDaily(state.cur.daily));
   const league=(state._league||[]).map(r=>`${r.name}: sessions ${r.a.s}, revenue £${r.a.r.toFixed(0)}, CVR ${(r.a.s?r.a.t/r.a.s*100:0).toFixed(2)}%, rev/1kHH £${r.perK.toFixed(2)}, index ${r.idx.toFixed(0)}`).join('\n');
   const cities=state.cur.cities.slice(0,15).map(c=>`${c.city} (${c.tv}): ${c.s} sessions, £${(+c.r).toFixed(0)}`).join('\n');
-  const flights=getFlights().map(f=>`${f.name} (${f.media}) ${f.start}→${f.end}, test: ${f.test.join('/')}, control: ${f.ctrl.join('/')}`).join('\n')||'none defined';
+  const flights=allFlights().map(f=>`${f.name} (${f.media}) ${f.start}→${f.end}, test: ${f.test.join('/')}, control: ${f.ctrl.join('/')}`).join('\n')||'none defined';
+  let board='not run yet';
+  if(state._flightBoard){ const m=METRICS[state._flightBoard.metric];
+    board=state._flightBoard.results.map(r=>r.err?`${r.f.name}: failed`:`${r.f.name}: uplift ${(r.st.uplift*100).toFixed(1)}%, carryover ${r.st.carry===null?'n/a (live)':(r.st.carry*100).toFixed(1)+'%'}, est incremental ${m.label.toLowerCase()} ${Math.round(r.st.incr)}, verdict ${r.vd.v}${r.vd.low?' (low confidence)':''}`).join('\n'); }
   const promos=PROMOS.flatMap(p=>p.runs.map(r=>`${p.label} ${r.tag}: ${r.start}→${r.end}${r.tbc?' (TBC)':''}`)).join('; ');
   let promoCmp='none run yet (user can run one on the Promotions tab)';
   if(state._promo&&state._promoRegs){
@@ -1252,6 +1359,7 @@ ${league}
 Top cities:
 ${cities}
 Campaign flights defined: ${flights}
+Campaign scoreboard (geo uplift, test vs control indexed to pre-flight baseline): ${board}
 Promotion calendar: ${promos}
 Bonded media plans on file (2025 = regional strategy: linear ITV Yorks/Tyne Tees heavy + regional CTV/radio/door drop; 2026 = addressable strategy: all-store postcode-targeted Adsmart/Sabio/ITVX/Skyrise/Converge, no linear/radio): ${planCal}
 Latest promotion comparison run in the dashboard: ${promoCmp}
