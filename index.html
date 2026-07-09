@@ -186,6 +186,11 @@ th.sortable:hover{color:var(--onair)}
       <div style="overflow-x:auto"><table id="topCitiesTable"></table></div>
     </div>
   </div>
+  <div class="panel">
+    <h3>Traffic source split</h3>
+    <div class="sub">UK sessions by source over the loaded period. Direct + Organic Search are the TV-sensitive sources — TV activity shows up here, not in click-attributed channels.</div>
+    <div style="overflow-x:auto"><table id="ovChanTable"></table></div>
+  </div>
 </div>
 
 <!-- ============ TRENDS ============ -->
@@ -299,8 +304,19 @@ th.sortable:hover{color:var(--onair)}
       <button class="action red" onclick="runPromoCompare()">Compare</button>
     </div>
     <div id="prStats" class="statrow"></div>
+    <div id="prPlans" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px;margin:0 0 12px"></div>
     <div class="chartbox tall"><canvas id="promoChart"></canvas></div>
     <div class="note" id="prNote"></div>
+  </div>
+  <div class="panel">
+    <h3>Traffic source — did TV move Direct &amp; Organic?</h3>
+    <div class="sub">TV rarely gets click credit — it shows up as brand search and direct visits. Day-aligned by source, so you can see whether this year's activity is lifting the TV-sensitive channels vs last year.</div>
+    <div class="ctlrow">
+      <label>Source</label><select id="prChan"><option value="HALO" selected>TV halo (Direct + Organic Search)</option></select>
+      <label>Measure</label><select id="prChanMeasure"><option value="s" selected>Sessions</option><option value="r">Revenue</option></select>
+    </div>
+    <div class="chartbox tall"><canvas id="promoChanChart"></canvas></div>
+    <div style="overflow-x:auto;margin-top:14px"><table id="promoChanTable"></table></div>
   </div>
   <div class="panel">
     <h3>TV region change between runs</h3>
@@ -435,6 +451,37 @@ const PROMOS = [
     {tag:'2026', start:'2026-07-11', end:'2026-07-12', tbc:true}]},
 ];
 const promoBands=()=>PROMOS.flatMap(p=>p.runs.map(r=>({from:r.start,to:r.end,label:p.label+' '+r.tag,tag:'PROMO'})));
+
+/* Bonded media plan summaries (client cost, approx). Key strategic shift: 2025 = regionally weighted
+   (linear ITV Yorks/Tyne Tees + regional CTV/radio/door drop); 2026 = all-store addressable
+   (Adsmart/Sabio/ITVX/Skyrise/Converge, postcode-targeted, no linear/radio/door drop). */
+const MEDIA_PLANS={
+ 'spring|2025':{budget:'£300k',window:'20 Mar → 26 May 2025',type:'Regional',
+   strategy:'Heavy linear ITV Yorks/Tyne Tees (~275 TVRs) + Sky Regional, ITVX VOD, Adsmart Nottingham, Skyrise CTV (Battersea/Kingston/Guildford), regional radio + Spotify podcasts, 725k door drop.',
+   focus:['North East','Yorkshire','Midlands','South & South East','London'],
+   mix:[['Linear TV (ITV Yorks/TT)','£93k'],['Regional VOD/CTV (ITVX, Sky, Skyrise)','£105k'],['Radio + podcasts','£39k'],['Door drop','£63k']]},
+ 'summer|2025':{budget:'£300k',window:'19 Jun → 25 Aug 2025',type:'Regional',
+   strategy:'Same regional model as Spring 25: linear ITV Yorks/TT (~230 TVRs) + regional VOD/CTV, radio, 710k door drop.',
+   focus:['North East','Yorkshire','Midlands','South & South East','London'],
+   mix:[['Linear TV (ITV Yorks/TT)','£109k'],['Regional VOD/CTV','£90k'],['Radio','£40k'],['Door drop','£61k']]},
+ 'autumn|2025':{budget:'£322k',window:'Sep → Nov 2025',type:'Regional',
+   strategy:'Regional model: linear ITV Yorks/TT (~174 TVRs), Sky Regional Yorks/TT + Meridian, ITVX, Adsmart Nottingham, Skyrise CTV, radio + Audio Ad Pro, 500k door drop.',
+   focus:['North East','Yorkshire','Midlands','South & South East','London'],
+   mix:[['Linear TV (ITV Yorks/TT)','£128k'],['Regional VOD/CTV','£85k'],['Radio + digital audio','£43k'],['Door drop','£55k']]},
+ 'winter|2025/26':{budget:'£294k',window:'19 Dec 2025 → late Feb 2026',type:'Regional',
+   strategy:'Regional, 10-second-only linear ITV Yorks/TT (~367 TVRs), ITVX, Adsmart (Yorks/TT + Nottingham + Brighton), Skyrise + ITVX London stores, radio + digital audio, Sunday Times Magazine full pages ×2.',
+   focus:['North East','Yorkshire','Midlands','South & South East','London'],
+   mix:[['Linear TV (ITV Yorks/TT, 10s)','£139k'],['VOD/CTV + Adsmart','£92k'],['Radio + digital audio','£51k'],['Print (Sunday Times Mag)','£12k']]},
+ 'spring|2026':{budget:'£290k',window:'26 Mar → 24 May 2026',type:'Addressable',
+   strategy:'STRATEGY CHANGE: no linear TV, no radio, no door drop. All-store addressable — Sky Adsmart (highest-indexing postcodes in store catchments), Sabio AVOD, ITVX drama, Skyrise SVOD (Netflix/Paramount/Amazon/Disney), Converge premium-publisher whitelist. Mosaic groups A/B/G.',
+   focus:['All store catchments (addressable)'],
+   mix:[['Sky Adsmart','£102k'],['Skyrise SVOD','£88k'],['Sabio AVOD','£60k'],['ITVX','£28k'],['Converge','£12k']]},
+ 'summer|2026':{budget:'£250k',window:'17 Jun → 30 Aug 2026',type:'Addressable',
+   strategy:'Same addressable model as Spring 26 at reduced budget (£250k vs £300k LY). Upweights at launch (17–19 Jun), Extra 10% weekend (6–12 Jul) and end-of-sale BH (17–30 Aug).',
+   focus:['All store catchments (addressable)'],
+   mix:[['Sky Adsmart','£83k'],['Skyrise SVOD','£74k'],['Sabio AVOD','£42k'],['ITVX','£42k'],['Converge','£9k']]},
+};
+const planFor=(key,tag)=>MEDIA_PLANS[key+'|'+tag];
 
 const METRICS = {
   sessions:{label:'Sessions',fmt:'num',base:'s'},
@@ -614,7 +661,7 @@ function fillMetricSelect(id,def){ const s=$(id); s.innerHTML=Object.entries(MET
 
 const ukDaily=rows=>rows.filter(r=>r.tv!=='Non-UK');
 function renderAll(){
-  renderKPIs(); renderLeague(); renderShare(); renderTopCities();
+  renderKPIs(); renderLeague(); renderShare(); renderTopCities(); renderOvChannels();
   buildTrendChips(); renderTrends(); renderRegions(); renderCities();
   renderChannels(); renderHalo(); renderFlightList();
   if($('tab-map').classList.contains('active'))renderMap();
@@ -670,6 +717,23 @@ function renderTopCities(){
   $('topCitiesTable').innerHTML=`<tr><th class="left">City</th><th class="left">TV region</th><th>Sessions</th><th>Revenue</th><th>CVR</th></tr>`+
     rows.map(c=>`<tr><td class="left">${c.city}</td><td class="left"><span class="swatch" style="background:${TV_COLOR[c.tv]||'#B9B4AA'}"></span>${c.tv}</td>
       <td class="num">${fmtNum(+c.s)}</td><td class="num">${fmtGBP(+c.r)}</td><td class="num">${fmtPct(+c.s? +c.t/+c.s:0)}</td></tr>`).join('');
+}
+
+function renderOvChannels(){
+  const agg=(chan)=>{ const o={}; (chan||[]).filter(x=>x.tv!=='Non-UK').forEach(x=>{
+    const a=o[x.c]||(o[x.c]={s:0,r:0}); a.s+=+x.s; a.r+=+x.r; }); return o; };
+  const cur=agg(state.cur.chan), cmp=state.cmp?agg(state.cmp.chan):null;
+  const tot=Object.values(cur).reduce((a,x)=>a+x.s,0)||1;
+  const maxS=Math.max(...Object.values(cur).map(x=>x.s),1);
+  const halo=c=>c==='Direct'||c==='Organic Search';
+  const rows=CHANNELS.filter(c=>cur[c]).sort((a,b)=>cur[b].s-cur[a].s);
+  $('ovChanTable').innerHTML=`<tr><th class="left">Source</th><th class="left" style="width:32%"></th><th>Sessions</th><th>Share</th><th>Δ Sess</th><th>Revenue</th><th>Δ Rev</th></tr>`+
+    rows.map(c=>{ const v=cur[c], p=cmp?cmp[c]:null;
+      return `<tr${halo(c)?' style="background:rgba(200,64,79,.05)"':''}><td class="left"><span class="swatch" style="background:${CH_COLOR[c]}"></span>${c}${halo(c)?' <span style="font-size:.62rem;font-weight:700;color:#C8404F">TV-SENSITIVE</span>':''}</td>
+      <td><div style="background:${CH_COLOR[c]};height:8px;border-radius:4px;width:${(v.s/maxS*100).toFixed(1)}%"></div></td>
+      <td class="num">${fmtNum(v.s)}</td><td class="num">${(v.s/tot*100).toFixed(1)}%</td>
+      <td>${deltaBadge(v.s,p?p.s:null)}</td>
+      <td class="num">${fmtGBP(v.r)}</td><td>${deltaBadge(v.r,p?p.r:null)}</td></tr>`;}).join('');
 }
 
 /* ================= TRENDS ================= */
@@ -999,11 +1063,12 @@ async function runPromoCompare(){
   if(!A||!B||A===B){alert('Pick two different runs.');return;}
   const yday=new Date(Date.now()-864e5).toISOString().slice(0,10);
   const q=r=>runQuery(`SELECT FORMAT_DATE('%Y-%m-%d',date) d, tv_region tv, SUM(sessions) s, SUM(users) u, SUM(new_users) nu, SUM(engaged_sessions) es, SUM(transactions) t, ROUND(SUM(revenue),2) r FROM ${T('geo_daily')} WHERE date BETWEEN '${r.start}' AND '${r.end<yday?r.end:yday}' AND tv_region!='Non-UK' GROUP BY 1,2 ORDER BY 1`);
+  const qc=r=>runQuery(`SELECT FORMAT_DATE('%Y-%m-%d',date) d, channel c, SUM(sessions) s, ROUND(SUM(revenue),2) r FROM ${T('geo_channel_daily')} WHERE date BETWEEN '${r.start}' AND '${r.end<yday?r.end:yday}' AND tv_region!='Non-UK' GROUP BY 1,2 ORDER BY 1`);
   $('prStats').innerHTML='<div class="note">Querying BigQuery…</div>';
-  let ra,rb;
-  try{ [ra,rb]=await Promise.all([q(A),q(B)]); }
+  let ra,rb,ca,cb;
+  try{ [ra,rb,ca,cb]=await Promise.all([q(A),q(B),qc(A),qc(B)]); }
   catch(e){ $('prStats').innerHTML=`<div class="note" style="color:#B03A48">Query failed: ${e.message}</div>`; return; }
-  state._promo={p,A,B,ra,rb}; renderPromo();
+  state._promo={p,A,B,ra,rb,ca,cb}; renderPromo();
 }
 function promoDayAggs(rows){
   const byDay={};
@@ -1024,12 +1089,24 @@ function renderPromo(){
   const sumN=(agg)=>{ const t={s:0,u:0,nu:0,es:0,t:0,r:0}; agg.slice(0,N).forEach(a=>{for(const k in t)t[k]+=a[k];}); return t; };
   const kA=sumN(aggA), kB=sumN(aggB);
   const kpi=(label,va,vb,fmt)=>`<div class="stat"><div class="statlabel">${label}</div><div class="statval">${fmt(vb)}</div><div class="statsub">${p.label} ${A.tag}: ${fmt(va)} ${deltaBadge(vb,va)}</div></div>`;
+  const haloN=(rows,run)=>{ const cut=new Date(run.start); cut.setDate(cut.getDate()+N-1); const iso=cut.toISOString().slice(0,10);
+    return rows.filter(x=>(x.c==='Direct'||x.c==='Organic Search')&&x.d<=iso).reduce((a,x)=>a+ +x.s,0); };
+  const hA=haloN(state._promo.ca,A), hB=haloN(state._promo.cb,B);
   $('prStats').innerHTML=
     kpi('Sessions',kA.s,kB.s,fmtNum)+
+    kpi('TV halo sessions',hA,hB,fmtNum)+
     kpi('Revenue',kA.r,kB.r,fmtGBP)+
     kpi('Transactions',kA.t,kB.t,fmtNum)+
     kpi('CVR',kA.s?kA.t/kA.s:0,kB.s?kB.t/kB.s:0,fmtPct)+
     kpi('AOV',kA.t?kA.r/kA.t:0,kB.t?kB.r/kB.t:0,fmtGBP2);
+  // media plan context cards
+  const planCard=(run)=>{ const pl=planFor(p.key,run.tag);
+    if(!pl)return `<div class="stat"><div class="statlabel">${p.label} ${run.tag} — media plan</div><div class="statsub" style="margin-top:4px">No Bonded plan on file for this run.</div></div>`;
+    return `<div class="stat"><div class="statlabel">${p.label} ${run.tag} — ${pl.type} · ${pl.budget}</div>
+      <div class="statsub" style="margin:4px 0 6px">${pl.window} · Focus: ${pl.focus.join(', ')}</div>
+      <div style="font-size:.74rem;line-height:1.45">${pl.strategy}</div>
+      <div class="statsub" style="margin-top:6px">${pl.mix.map(m=>m[0]+' '+m[1]).join(' · ')}</div></div>`; };
+  $('prPlans').innerHTML=planCard(A)+planCard(B);
   $('prNote').textContent=`Like-for-like: first ${N} days of each run.`+
     (inflight?` ${p.label} ${B.tag} is in flight — day ${lenB} of ${plannedB}.`:'')+
     ` ${p.label} ${A.tag}: ${A.start} → ${A.end} (${lenA}d in data). ${p.label} ${B.tag}: ${B.start} → ${B.end}.`+
@@ -1074,6 +1151,53 @@ function renderPromo(){
       <td class="num">${fmtGBP(x.a.r)}</td><td class="num">${fmtGBP(x.b.r)}</td><td>${deltaBadge(x.b.r,x.a.r)}</td>
       <td class="num">${fmtPct(x.a.s?x.a.t/x.a.s:0)}</td><td class="num">${fmtPct(x.b.s?x.b.t/x.b.s:0)}</td></tr>`).join('');
   state._promoRegs={regs,A,B};
+  renderPromoChannels(N);
+}
+function renderPromoChannels(N){
+  if(!state._promo)return;
+  const {p,A,B,ca,cb}=state._promo;
+  // fill source select once per compare (keep selection if possible)
+  const sel=$('prChan'); const keep=sel.value;
+  sel.innerHTML='<option value="HALO">TV halo (Direct + Organic Search)</option>'+CHANNELS.map(c=>`<option value="${c}">${c}</option>`).join('');
+  if([...sel.options].some(o=>o.value===keep))sel.value=keep;
+  const ch=sel.value, meas=$('prChanMeasure').value;
+  const pick=x=>ch==='HALO'?(x.c==='Direct'||x.c==='Organic Search'):x.c===ch;
+  const daySeries=(rows)=>{ const days=[...new Set(rows.map(x=>x.d))].sort();
+    const byDay={}; rows.filter(pick).forEach(x=>byDay[x.d]=(byDay[x.d]||0)+ +x[meas]);
+    return days.map(d=>byDay[d]||0); };
+  let vA=daySeries(ca), vB=daySeries(cb);
+  const cum=$('prCum').checked, smooth=$('prSmooth').checked&&!cum;
+  const proc=v=>{ if(cum){let run=0;return v.map(x=>run+=x);}
+    if(smooth)return v.map((_,i)=>{const w=v.slice(Math.max(0,i-6),i+1);return w.reduce((x,y)=>x+y,0)/w.length;});
+    return v; };
+  vA=proc(vA); vB=proc(vB);
+  const maxLen=Math.max(vA.length,vB.length);
+  const labels=Array.from({length:maxLen},(_,i)=>'Day '+(i+1));
+  const chName=ch==='HALO'?'TV halo (Direct + Organic)':ch;
+  destroyChart('promoChan');
+  state.charts.promoChan=new Chart($('promoChanChart'),{type:'line',
+    data:{labels,datasets:[
+      {label:chName+' — '+A.tag,data:vA,borderColor:'#8A93A0',backgroundColor:'#8A93A0',borderWidth:2,borderDash:[6,4],pointRadius:0,tension:.3},
+      {label:chName+' — '+B.tag,data:vB,borderColor:ch==='HALO'?'#C8404F':(CH_COLOR[ch]||'#C8404F'),backgroundColor:ch==='HALO'?'#C8404F':(CH_COLOR[ch]||'#C8404F'),borderWidth:2.5,pointRadius:0,tension:.3}]},
+    options:{maintainAspectRatio:false,
+      plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:10}}},
+        tooltip:{callbacks:{label:c=>` ${c.dataset.label}: ${meas==='r'?fmtGBP(c.parsed.y):fmtNum(Math.round(c.parsed.y))}`}}},
+      scales:{x:{ticks:{maxTicksLimit:16,font:{size:9}}},
+        y:{title:{display:true,text:(meas==='r'?'Revenue':'Sessions')+(cum?' (cumulative)':smooth?' (7-day avg)':''),font:{size:10}},
+          ticks:{callback:v=>meas==='r'?fmtGBP(v):v.toLocaleString()}}}}});
+  // channel mix table, like-for-like first N days
+  const chanAgg=(rows,run)=>{ const cut=new Date(run.start); cut.setDate(cut.getDate()+N-1); const iso=cut.toISOString().slice(0,10);
+    const o={}; rows.filter(x=>x.d<=iso).forEach(x=>{ const a=o[x.c]||(o[x.c]={s:0,r:0}); a.s+=+x.s; a.r+=+x.r; }); return o; };
+  const gA=chanAgg(ca,A), gB=chanAgg(cb,B);
+  const totA=Object.values(gA).reduce((a,x)=>a+x.s,0)||1, totB=Object.values(gB).reduce((a,x)=>a+x.s,0)||1;
+  const rows=CHANNELS.filter(c=>gA[c]||gB[c]).map(c=>({c,a:gA[c]||{s:0,r:0},b:gB[c]||{s:0,r:0}})).sort((x,y)=>y.b.s-x.b.s);
+  const halo=r=>r.c==='Direct'||r.c==='Organic Search';
+  $('promoChanTable').innerHTML=`<tr><th class="left">Source</th><th>Sessions ${A.tag}</th><th>Sessions ${B.tag}</th><th>Δ</th><th>Share ${A.tag}</th><th>Share ${B.tag}</th><th>Revenue ${A.tag}</th><th>Revenue ${B.tag}</th><th>Δ</th></tr>`+
+    rows.map(x=>`<tr${halo(x)?' style="background:rgba(200,64,79,.05)"':''}><td class="left"><span class="swatch" style="background:${CH_COLOR[x.c]||'#8C8C8C'}"></span>${x.c}${halo(x)?' <span style="font-size:.62rem;font-weight:700;color:#C8404F">TV-SENSITIVE</span>':''}</td>
+      <td class="num">${fmtNum(x.a.s)}</td><td class="num">${fmtNum(x.b.s)}</td><td>${deltaBadge(x.b.s,x.a.s)}</td>
+      <td class="num">${(x.a.s/totA*100).toFixed(1)}%</td><td class="num">${(x.b.s/totB*100).toFixed(1)}%</td>
+      <td class="num">${fmtGBP(x.a.r)}</td><td class="num">${fmtGBP(x.b.r)}</td><td>${deltaBadge(x.b.r,x.a.r)}</td></tr>`).join('');
+  state._promoChans=rows;
 }
 function exportPromoRegions(){
   if(!state._promoRegs){alert('Run a comparison first.');return;}
@@ -1090,7 +1214,7 @@ function renderPromoCalendar(){
         <td class="left" style="font-weight:600;color:${status==='Live now'?'#C8404F':status==='Upcoming'?'#5E6B78':'#1E7B4F'}">${status}</td></tr>`;
     })).join('');
 }
-['prMetric','prSmooth','prCum'].forEach(id=>$(id).onchange=()=>{ if(state._promo)renderPromo(); });
+['prMetric','prSmooth','prCum','prChan','prChanMeasure'].forEach(id=>$(id).onchange=()=>{ if(state._promo)renderPromo(); });
 fillPromoSelects();
 
 /* ================= ASK AI ================= */
@@ -1109,11 +1233,18 @@ function aiContext(){
     const tot=k=>regs.reduce((acc,x)=>({s:acc.s+x[k].s,t:acc.t+x[k].t,r:acc.r+x[k].r}),{s:0,t:0,r:0});
     const tA=tot('a'), tB=tot('b');
     const regLines=regs.map(x=>`${x.tv}: sessions ${x.a.s}→${x.b.s} (${x.a.s?((x.b.s/x.a.s-1)*100).toFixed(1):'n/a'}%), revenue £${x.a.r.toFixed(0)}→£${x.b.r.toFixed(0)} (${x.a.r?((x.b.r/x.a.r-1)*100).toFixed(1):'n/a'}%)`).join('\n');
+    const chanLines=(state._promoChans||[]).map(x=>`${x.c}: sessions ${x.a.s}→${x.b.s} (${x.a.s?((x.b.s/x.a.s-1)*100).toFixed(1):'n/a'}%), revenue £${x.a.r.toFixed(0)}→£${x.b.r.toFixed(0)}`).join('\n');
+    const plA=planFor(p.key,A.tag), plB=planFor(p.key,B.tag);
     promoCmp=`${p.label} ${A.tag} vs ${B.tag}, like-for-like first N days of each run (UK only).
 UK totals: sessions ${tA.s}→${tB.s} (${((tB.s/tA.s-1)*100).toFixed(1)}%), transactions ${tA.t}→${tB.t}, revenue £${tA.r.toFixed(0)}→£${tB.r.toFixed(0)} (${((tB.r/tA.r-1)*100).toFixed(1)}%).
 By TV region (${A.tag}→${B.tag}):
-${regLines}`;
+${regLines}
+By traffic source (${A.tag}→${B.tag}) — Direct and Organic Search are the TV-sensitive sources:
+${chanLines}
+Media plan ${A.tag}: ${plA?`${plA.type}, ${plA.budget}, ${plA.window}. ${plA.strategy}`:'not on file'}
+Media plan ${B.tag}: ${plB?`${plB.type}, ${plB.budget}, ${plB.window}. ${plB.strategy}`:'not on file'}`;
   }
+  const planCal=Object.entries(MEDIA_PLANS).map(([k,pl])=>`${k.replace('|',' ')}: ${pl.type}, ${pl.budget}, ${pl.window}`).join('; ');
   return `Barker & Stonehouse (premium UK furniture retailer) location performance, ${state.range.s} to ${state.range.e}${state.cmpRange?`, compared vs ${state.cmpRange.s} to ${state.cmpRange.e}`:''}.
 UK totals: ${uk.s} sessions, ${uk.u} users, ${uk.t} transactions, £${uk.r.toFixed(0)} revenue, CVR ${(uk.s?uk.t/uk.s*100:0).toFixed(2)}%.
 TV region league (index = revenue per 1k TV households vs UK average = 100):
@@ -1122,6 +1253,7 @@ Top cities:
 ${cities}
 Campaign flights defined: ${flights}
 Promotion calendar: ${promos}
+Bonded media plans on file (2025 = regional strategy: linear ITV Yorks/Tyne Tees heavy + regional CTV/radio/door drop; 2026 = addressable strategy: all-store postcode-targeted Adsmart/Sabio/ITVX/Skyrise/Converge, no linear/radio): ${planCal}
 Latest promotion comparison run in the dashboard: ${promoCmp}
 Known events: 30 Jun 2026 dining chair delivery moved to flat £15.`;
 }
